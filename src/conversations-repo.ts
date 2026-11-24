@@ -1,6 +1,6 @@
 // Conversations and their messages (the chat log the assistant keeps).
 
-import type { ChannelName, InboundMessage } from './channels/types';
+import { CHANNEL_NAMES, type ChannelName, type InboundMessage } from './channels/types';
 
 export interface Conversation {
   id: number;
@@ -34,6 +34,8 @@ export async function getOrCreateConversation(
   channel: ChannelName,
   phoneNumber: string,
 ): Promise<Conversation> {
+  // The database accepts any channel name, so the list is checked here.
+  if (!CHANNEL_NAMES.includes(channel)) throw new Error(`unknown channel: ${channel}`);
   await db
     .prepare('INSERT OR IGNORE INTO conversations (channel, phone_number) VALUES (?, ?)')
     .bind(channel, phoneNumber)

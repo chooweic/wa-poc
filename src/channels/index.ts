@@ -2,20 +2,26 @@
 
 import { getConfig, type Env } from '../env';
 import { WhatsAppClient } from '../whatsapp-client';
+import { TelegramClient } from '../telegram-client';
 import { TwilioClient } from '../twilio-client';
 import { MetaWhatsAppChannel } from './meta';
 import { MockWaChannel } from './mockwa';
+import { TelegramChannel } from './telegram';
 import { TwilioWhatsAppChannel } from './twilio';
 import type { ChannelName, MessagingChannel } from './types';
 
 /**
- * `replyFrom` is the business address the user wrote to, when the channel
- * reports it. Twilio replies from it; without it Twilio falls back to
- * TWILIO_WHATSAPP_FROM.
+ * `replyFrom` is where the conversation is happening, when the channel
+ * reports it: Twilio replies from that number (falling back to
+ * TWILIO_WHATSAPP_FROM); Telegram replies to that chat.
  */
 export function createChannel(env: Env, name: ChannelName, replyFrom?: string | null): MessagingChannel {
   if (name === 'mock') return new MockWaChannel(env.DB);
   const config = getConfig(env);
+  if (name === 'telegram') {
+    if (!config.telegramEnabled) throw new Error('The Telegram channel is disabled (TELEGRAM_BOT_TOKEN is not set).');
+    return new TelegramChannel(new TelegramClient(env.TELEGRAM_BOT_TOKEN as string), env.DB, replyFrom);
+  }
   if (name === 'twilio') {
     if (!config.twilioEnabled) throw new Error('The Twilio channel is disabled (TWILIO_* settings are not set).');
     const from = replyFrom?.trim() || env.TWILIO_WHATSAPP_FROM?.trim();

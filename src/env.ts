@@ -34,6 +34,9 @@ export interface Env {
   TWILIO_AUTH_TOKEN?: string;
   TWILIO_WHATSAPP_FROM?: string;
 
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_WEBHOOK_SECRET?: string;
+
   ADMIN_PASSWORD?: string;
 
   APP_TIMEZONE?: string;
@@ -63,6 +66,8 @@ export interface Config {
    * taken from each incoming message; TWILIO_WHATSAPP_FROM is only a fallback.
    */
   twilioEnabled: boolean;
+  /** True when the Telegram bot token is set. */
+  telegramEnabled: boolean;
   whatsappApiVersion: string;
 }
 
@@ -99,6 +104,7 @@ export function getConfig(env: Env): Config {
         env.WHATSAPP_VERIFY_TOKEN,
     ),
     twilioEnabled: Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN),
+    telegramEnabled: Boolean(env.TELEGRAM_BOT_TOKEN?.trim()),
     whatsappApiVersion: env.WHATSAPP_API_VERSION?.trim() || 'v25.0',
   };
 }

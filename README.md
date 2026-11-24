@@ -29,14 +29,15 @@ prompt, are in [docs/requirements.md](docs/requirements.md).
 5. [Secrets and settings](#secrets-and-settings)
 6. [Connect a real WhatsApp number](#connect-a-real-whatsapp-number)
 7. [WhatsApp through Twilio](#whatsapp-through-twilio)
-8. [Test users](#test-users)
-9. [Demo script](#demo-script)
-10. [Synthetic test images](#synthetic-test-images)
-11. [Choosing the Claude model](#choosing-the-claude-model)
-12. [Logs and tests](#logs-and-tests)
-13. [Privacy and retention](#privacy-and-retention)
-14. [Limits to know about](#limits-to-know-about)
-15. [Next steps and backlog](#next-steps-and-backlog)
+8. [Telegram](#telegram)
+9. [Test users](#test-users)
+10. [Demo script](#demo-script)
+11. [Synthetic test images](#synthetic-test-images)
+12. [Choosing the Claude model](#choosing-the-claude-model)
+13. [Logs and tests](#logs-and-tests)
+14. [Privacy and retention](#privacy-and-retention)
+15. [Limits to know about](#limits-to-know-about)
+16. [Next steps and backlog](#next-steps-and-backlog)
 
 ## The four pages
 
@@ -51,8 +52,9 @@ All of them ask for a login: any username, and the `ADMIN_PASSWORD` you set.
 
 The live app is at <https://wa-poc.chooweic.workers.dev>.
 
-`/webhook` (for Meta) and `/twilio/webhook` (for Twilio) are the only public
-addresses. Every request to them must carry Meta's or Twilio's signature.
+`/webhook` (Meta), `/twilio/webhook` (Twilio) and `/telegram/webhook`
+(Telegram) are the only public addresses. Every request to them must carry
+Meta's or Twilio's signature, or Telegram's secret header.
 
 ### Screenshots
 
@@ -107,9 +109,10 @@ simulated on your machine by Wrangler.
 ## How it works
 
 ```
- WhatsApp (Meta)   ──► /webhook ────────┐
- WhatsApp (Twilio) ──► /twilio/webhook ─┼─► store message ─► Queue ─► orchestrator ─► reply
- /mock-wa page     ──► /mock-wa/api ────┘                              │
+ WhatsApp (Meta)   ──► /webhook ──────────┐
+ WhatsApp (Twilio) ──► /twilio/webhook ───┤
+ Telegram          ──► /telegram/webhook ─┼─► store message ─► Queue ─► orchestrator ─► reply
+ /mock-wa page     ──► /mock-wa/api ──────┘                              │
                                                                        ├─ commands: /reset, /cancel
                                                                        ├─ "YES" on a draft awaiting confirmation ─► submit
                                                                        └─ otherwise: Claude turn with tools
@@ -119,9 +122,9 @@ simulated on your machine by Wrangler.
                                            mock target app (D1 tables, API log)
 ```
 
-### One pipeline, three channels
+### One pipeline, four channels
 
-Sending and receiving sit behind a `MessagingChannel` interface with three
+Sending and receiving sit behind a `MessagingChannel` interface with four
 implementations, which can all be on at once:
 
 - `MetaWhatsAppChannel`: WhatsApp through Meta's Cloud API (webhook, Graph API
@@ -129,12 +132,13 @@ implementations, which can all be on at once:
 - `TwilioWhatsAppChannel`: WhatsApp through Twilio, as an alternative while a
   Meta business account is being sorted out (see
   [WhatsApp through Twilio](#whatsapp-through-twilio)).
+- `TelegramChannel`: a Telegram bot (see [Telegram](#telegram)).
 - `MockWaChannel`: the `/mock-wa` page. Files go straight to R2 and replies
   are stored in `mock_wa_messages` for the page to poll.
 
 Everything after that is the same code: queue, orchestrator, Claude, drafts,
 checklist, confirmation gate and target app. Tests check that the same message
-through Meta, Twilio or Mock WhatsApp gives Claude an identical request.
+through Meta, Twilio, Telegram or Mock WhatsApp gives Claude an identical request.
 
 ### Background processing: Cloudflare Queues
 
@@ -217,7 +221,10 @@ src/
   whatsapp-client.ts   Graph API: send, typing indicator, media download
   twilio-webhook.ts    Twilio webhook: signature, parsing
   twilio-client.ts     Twilio API: send, typing indicator, media download
-  channels/            MessagingChannel + the Meta, Twilio and Mock WhatsApp implementations
+  telegram-webhook.ts  Telegram webhook: secret check, share-your-number step, parsing
+  telegram-client.ts   Telegram Bot API: send, typing, file download, webhook setup
+  telegram-links.ts    which phone number each Telegram account belongs to
+  channels/            MessagingChannel + the Meta, Twilio, Telegram and Mock WhatsApp implementations
   pipeline.ts          store → queue → process, shared by all channels
   sender.ts            the one place that decides who the sender is
   orchestrator.ts      commands, the YES gate, the Claude tool loop, submission
@@ -316,10 +323,14 @@ Locally these go in `.dev.vars`. In production set them with
 | `TWILIO_AUTH_TOKEN` | for Twilio | Your Twilio Auth Token; also verifies the webhook signature |
 | `TWILIO_WHATSAPP_FROM` | optional | Fallback sender, e.g. `whatsapp:+14155238886`. Normally replies go out from the number the user wrote to, taken from each message. |
 
-Without the `WHATSAPP_*` secrets the Meta channel is simply off; without the
-`TWILIO_*` ones the Twilio channel is off; `/mock-wa` works on its own either
-way. `ALLOWED_WHATSAPP_NUMBERS` applies to Meta and Twilio; any number can be
-used on `/mock-wa`.
+| `TELEGRAM_BOT_TOKEN` | for Telegram | The token @BotFather gives you for your bot |
+| `TELEGRAM_WEBHOOK_SECRET` | optional | The secret Telegram sends with each update. Derived from the bot token if not set. |
+
+Each channel is off until its settings are added: `WHATSAPP_*` for Meta,
+`TWILIO_*` for Twilio, `TELEGRAM_BOT_TOKEN` for Telegram. `/mock-wa` works on
+its own either way. `/admin` → **Channels** shows which are on.
+`ALLOWED_WHATSAPP_NUMBERS` applies to Meta, Twilio and Telegram (despite the
+name); any number can be used on `/mock-wa`.
 
 Other settings, in `wrangler.jsonc` under `vars`: `APP_TIMEZONE` (default
 `Asia/Singapore`, used for "today" and deadlines) and `TARGET_APP_MODE`
@@ -425,6 +436,55 @@ Things to know about the sandbox:
 
 For real users, register your own WhatsApp sender with Twilio (this still goes
 through Meta's business checks), then change `TWILIO_WHATSAPP_FROM`.
+
+**Trial accounts can't be used.** On a Twilio trial, WhatsApp messages can only
+be Twilio's own ready-made templates. Every reply from the agent is refused
+with error 21654 ("ContentSid Required"), whether it is sent through the API
+or as a TwiML reply (both were tried). Upgrade the account to use this channel.
+
+## Telegram
+
+A Telegram bot is a free, quick way to test on a real phone: no business
+verification, no templates and no 24-hour reply window.
+
+**Set up (about 5 minutes):**
+
+1. In Telegram, open a chat with **@BotFather**, send `/newbot`, and choose a
+   name and a username for the bot (the username must end in `bot`).
+   BotFather replies with a **token** like `123456789:AA...`.
+2. In Cloudflare, under **wa-poc → Settings → Variables and Secrets**, add the
+   token as a secret named `TELEGRAM_BOT_TOKEN`.
+3. Open `/admin` → **Channels** and click **Connect Telegram**. This tells
+   Telegram to send the bot's messages to
+   `https://wa-poc.chooweic.workers.dev/telegram/webhook` (with a secret, so
+   nobody else can post to it) and sets the bot's command menu. The card then
+   shows the bot's name and "Connected".
+4. Make sure your phone number is in `ALLOWED_WHATSAPP_NUMBERS` and is a test
+   user (see [Test users](#test-users)).
+5. Open the bot in Telegram (the link is on the Channels card), press
+   **Start**, and tap **Share my phone number** when asked.
+
+**Why the bot asks for your phone number:** Telegram never tells a bot a
+user's phone number, but this app uses the phone number as the user's ID (for
+the allowlist, test users and the request sent to the target app). So the bot
+asks once, using Telegram's own "share my phone number" button. Telegram then
+sends the number together with the account it belongs to, and the app only
+accepts it if it is the sender's own. The link is stored, so it's asked only
+once. `/admin` → Channels lists linked accounts and can unlink one.
+
+Things to know:
+
+- Only one-to-one chats are answered; the bot ignores groups and edited messages.
+- Photos and PDFs work as on WhatsApp. Telegram lets bots download files up to
+  20 MB; this app's own limit (5 MB) still applies.
+- `*bold*` in the agent's replies is shown as bold.
+- A Telegram conversation is separate from WhatsApp and Mock WhatsApp ones,
+  even for the same phone number. `/admin` labels it "Telegram".
+- **Privacy:** ordinary Telegram chats are not end-to-end encrypted (Telegram's
+  servers can read them), unlike WhatsApp. Fine for this prototype with
+  synthetic documents; think about it before real medical certificates go
+  through it.
+- If the app's address ever changes, click **Connect Telegram** again.
 
 ## Test users
 
@@ -646,8 +706,10 @@ automatic deletion.
 - **The typing indicator** on real WhatsApp disappears after about 25 seconds,
   so it may vanish before a long turn finishes.
 - **One conversation per channel.** The same phone number on `/mock-wa`, on
-  WhatsApp through Meta and on WhatsApp through Twilio has a separate
-  conversation and draft on each.
+  WhatsApp through Meta, on WhatsApp through Twilio and on Telegram has a
+  separate conversation and draft on each.
+- **Telegram's typing indicator** lasts about 5 seconds, so on longer turns it
+  disappears before the reply arrives.
 
 ## Next steps and backlog
 

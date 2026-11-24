@@ -26,6 +26,10 @@ import {
   type KbTable,
 } from '../kb-repo';
 import { clearConversations, seedMockData } from '../mock-app/seed';
+import { TelegramApiError, TelegramClient } from '../telegram-client';
+import { listTelegramLinks, unlinkTelegram } from '../telegram-links';
+import { telegramWebhookSecret } from '../telegram-webhook';
+import { getConfig } from '../env';
 import { deleteMockUser, listMockUsers, parseUserInput, saveMockUser, type UserInput } from '../mock-app/users';
 import { html, htmlResponse, raw, redirect, type Raw } from '../util';
 import { checkSchemaText } from '../validation';
@@ -85,7 +89,7 @@ code{font:12.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background
 .bubble small{display:block;color:var(--muted);font-size:11px;margin-top:2px}
 `;
 
-type Tab = 'kb' | 'technical' | 'drafts' | 'conversations' | 'users' | 'demo';
+type Tab = 'kb' | 'technical' | 'drafts' | 'conversations' | 'users' | 'channels' | 'demo';
 
 function layout(tab: Tab, title: string, body: Raw, flash?: { text: string; error?: boolean }): Response {
   const tabs: [Tab, string, string][] = [
@@ -94,6 +98,7 @@ function layout(tab: Tab, title: string, body: Raw, flash?: { text: string; erro
     ['drafts', 'Drafts', '/admin/drafts'],
     ['conversations', 'Conversations', '/admin/conversations'],
     ['users', 'Test users', '/admin/users'],
+    ['channels', 'Channels', '/admin/channels'],
     ['demo', 'Demo', '/admin/demo'],
   ];
   const page = html`<!doctype html>
@@ -498,7 +503,9 @@ const channelPill = (channel: string): Raw =>
     ? html`<span class="pill warn">Simulated</span>`
     : channel === 'twilio'
       ? html`<span class="pill ok">WhatsApp via Twilio</span>`
-      : html`<span class="pill ok">WhatsApp</span>`;
+      : channel === 'telegram'
+        ? html`<span class="pill ok">Telegram</span>`
+        : html`<span class="pill ok">WhatsApp</span>`;
 
 async function conversationsRoutes(env: Env, parts: string[]): Promise<Response> {
   if (parts[0]) {
@@ -623,6 +630,95 @@ async function usersRoutes(request: Request, env: Env, url: URL, parts: string[]
   return redirect('/admin/users?msg=Saved');
 }
 
+// --------------------------------------------------------------- channels
+
+const onOff = (on: boolean): Raw => (on ? html`<span class="pill ok">On</span>` : html`<span class="pill">Off</span>`);
+
+async function channelsPage(env: Env, url: URL, flash?: { text: string; error?: boolean }): Promise<Response> {
+  const config = getConfig(env);
+  let telegramStatus: Raw = html``;
+  if (config.telegramEnabled) {
+    try {
+      const client = new TelegramClient(env.TELEGRAM_BOT_TOKEN as string);
+      const [me, info] = await Promise.all([
+        client.call<{ username?: string }>('getMe', {}),
+        client.call<{ url?: string; pending_update_count?: number; last_error_message?: string; last_error_date?: number }>('getWebhookInfo', {}),
+      ]);
+      const expected = `${url.origin}/telegram/webhook`;
+      telegramStatus = html`
+  <p>Bot: ${me.username ? html`<a href="https://t.me/${me.username}" target="_blank" rel="noopener">@${me.username}</a>` : 'unknown'}</p>
+  <p>Webhook: ${info.url === expected ? html`<span class="pill ok">Connected</span>` : info.url ? html`<span class="pill warn">Points elsewhere</span> <code>${info.url}</code>` : html`<span class="pill warn">Not connected</span>`}
+  ${info.pending_update_count ? html`<span class="sub"> · ${info.pending_update_count} update(s) waiting</span>` : ''}</p>
+  ${info.last_error_message ? html`<p class="msg err">Last error reported by Telegram: ${info.last_error_message}${info.last_error_date ? ` (${new Date(info.last_error_date * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC)` : ''}</p>` : ''}`;
+    } catch (error) {
+      telegramStatus =
+        error instanceof TelegramApiError && error.status === 401
+          ? html`<p class="msg err">Telegram rejected the bot token. Check TELEGRAM_BOT_TOKEN (copy it again from @BotFather).</p>`
+          : html`<p class="msg err">Could not get the bot's status from Telegram: ${error instanceof TelegramApiError ? error.description : (error as Error).message}</p>`;
+    }
+  }
+  const links = await listTelegramLinks(env.DB);
+  const body = html`<h2>Channels</h2>
+<p class="sub">How people reach the Attendance Business Agent. Each channel switches on when its settings are added in Cloudflare
+(Workers &amp; Pages → wa-poc → Settings → Variables and Secrets). Mock WhatsApp is always on.</p>
+<div class="card"><h3>WhatsApp (Meta) ${onOff(config.metaEnabled)}</h3>
+  <p class="sub">Webhook <code>${url.origin}/webhook</code>. Settings: WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_APP_SECRET, WHATSAPP_VERIFY_TOKEN.</p></div>
+<div class="card"><h3>WhatsApp via Twilio ${onOff(config.twilioEnabled)}</h3>
+  <p class="sub">Webhook <code>${url.origin}/twilio/webhook</code>. Settings: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN.
+  A Twilio trial account cannot send the agent's replies; an upgraded account can.</p></div>
+<div class="card"><h3>Telegram ${onOff(config.telegramEnabled)}</h3>
+  ${
+    config.telegramEnabled
+      ? html`${telegramStatus}
+  <form method="post" action="/admin/channels/telegram/connect"><button class="primary">Connect Telegram</button></form>
+  <p class="hint">Tells Telegram to send this bot's messages to <code>${url.origin}/telegram/webhook</code>, and sets the bot's command menu.
+  Click it again after the app's address changes.</p>`
+      : html`<p class="sub">Off. In Telegram, message <strong>@BotFather</strong>, send <code>/newbot</code>, and add the token it gives you
+  as the secret <code>TELEGRAM_BOT_TOKEN</code>. Then come back here and click “Connect Telegram”.</p>`
+  }
+  <h3 style="margin-top:14px">Linked Telegram accounts (${links.length})</h3>
+  <p class="sub">Telegram does not tell the bot a user's phone number, so each user shares it once with a button in the chat.
+  The number must also be in ALLOWED_WHATSAPP_NUMBERS (and be a test user) for requests to go through.</p>
+  ${links.map(
+    (l) => html`<div class="reason"><div class="row">
+<div class="grow"><code>${l.phone_number ?? 'not shared yet'}</code> <span class="sub">Telegram user ${l.user_id} · updated ${l.updated_at.slice(0, 16).replace('T', ' ')} UTC</span></div>
+<form method="post" action="/admin/channels/telegram/unlink" onsubmit="return confirm('Unlink this Telegram account? The user will be asked to share their number again.')">
+<input type="hidden" name="user_id" value="${l.user_id}"><button class="danger">Unlink</button></form></div></div>`,
+  )}
+</div>`;
+  return layout('channels', 'Channels', body, flash);
+}
+
+async function channelsRoutes(request: Request, env: Env, url: URL, parts: string[]): Promise<Response> {
+  if (request.method !== 'POST') return channelsPage(env, url, flashFrom(url));
+  if (parts[0] !== 'telegram') return notFound();
+  if (parts[1] === 'unlink') {
+    await unlinkTelegram(env.DB, field(await request.formData(), 'user_id'));
+    return redirect('/admin/channels?msg=Telegram+account+unlinked');
+  }
+  if (parts[1] !== 'connect') return notFound();
+  if (!getConfig(env).telegramEnabled) return channelsPage(env, url, { text: 'Add TELEGRAM_BOT_TOKEN first.', error: true });
+  const client = new TelegramClient(env.TELEGRAM_BOT_TOKEN as string);
+  try {
+    await client.call('setWebhook', {
+      url: `${url.origin}/telegram/webhook`,
+      secret_token: await telegramWebhookSecret(env),
+      allowed_updates: ['message'],
+      max_connections: 10,
+    });
+    await client.call('setMyCommands', {
+      commands: [
+        { command: 'reset', description: 'Start the conversation again' },
+        { command: 'cancel', description: 'Cancel the request in progress' },
+      ],
+    });
+  } catch (error) {
+    const why = error instanceof TelegramApiError ? error.description : (error as Error).message;
+    return channelsPage(env, url, { text: `Telegram refused: ${why}`, error: true });
+  }
+  return redirect('/admin/channels?msg=Telegram+connected');
+}
+
 // ---------------------------------------------------------------- router
 
 function flashFrom(url: URL): { text: string } | undefined {
@@ -650,6 +746,8 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
       return conversationsRoutes(env, parts);
     case 'users':
       return usersRoutes(request, env, url, parts);
+    case 'channels':
+      return channelsRoutes(request, env, url, parts);
     case 'demo':
       return demoRoutes(request, env, url, parts);
     default:

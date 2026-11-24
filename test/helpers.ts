@@ -258,3 +258,40 @@ export async function sendViaTwilio(env: TestEnv, deps: OrchestratorDeps, fields
   await drainQueue(env, deps);
   return response;
 }
+
+// ------------------------------------------------- Telegram
+
+import { handleTelegramWebhook, telegramWebhookSecret } from '../src/telegram-webhook';
+
+export const TELEGRAM_SETTINGS = { TELEGRAM_BOT_TOKEN: '123456:TEST-token' };
+
+let telegramUpdateId = 1000;
+let telegramMessageId = 1;
+
+/** A Telegram update for a private chat; `user` doubles as the chat id, as in real private chats. */
+export function telegramUpdate(message: Record<string, unknown>, user = 777): Record<string, unknown> {
+  return {
+    update_id: ++telegramUpdateId,
+    message: {
+      message_id: ++telegramMessageId,
+      date: 1795500000,
+      from: { id: user, is_bot: false, first_name: 'Test' },
+      chat: { id: user, type: 'private', first_name: 'Test' },
+      ...message,
+    },
+  };
+}
+
+/** Posts an update to the real Telegram webhook handler, then runs the queue. Returns the HTTP response. */
+export async function sendViaTelegram(env: TestEnv, deps: OrchestratorDeps, update: unknown, secret?: string): Promise<Response> {
+  const response = await handleTelegramWebhook(
+    new Request('https://app.test/telegram/webhook', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': secret ?? (await telegramWebhookSecret(env)) },
+      body: JSON.stringify(update),
+    }),
+    env,
+  );
+  await drainQueue(env, deps);
+  return response;
+}

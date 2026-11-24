@@ -80,7 +80,9 @@ because that is content business users write.
 **Secrets** (Worker secrets in production, `.dev.vars` locally; never hard-coded):
 ANTHROPIC_API_KEY, ADMIN_PASSWORD, WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID,
 WHATSAPP_BUSINESS_ACCOUNT_ID, WHATSAPP_APP_SECRET, WHATSAPP_VERIFY_TOKEN,
-ALLOWED_WHATSAPP_NUMBERS, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM (optional fallback)
+ALLOWED_WHATSAPP_NUMBERS (applies to Meta, Twilio and Telegram), TWILIO_ACCOUNT_SID,
+TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM (optional fallback), TELEGRAM_BOT_TOKEN,
+TELEGRAM_WEBHOOK_SECRET (optional; derived from the bot token)
 
 **Plain settings** (in `wrangler.jsonc` under `vars`; `.dev.vars` overrides locally):
 | Name | Value in the deployment | Notes |
@@ -139,6 +141,33 @@ Without ADMIN_PASSWORD every page except `/webhook` stays locked.
   (only from twilio.com), check the size, store in R2.
 - Conversations record the channel `twilio`; `/admin` labels them "WhatsApp via
   Twilio". The database constraint on the channel allows `meta`, `twilio` and `mock`.
+
+### 1c. Telegram (`/telegram/webhook`), alongside the others
+- A Telegram bot, created with @BotFather; on when TELEGRAM_BOT_TOKEN is set.
+- Verify the `X-Telegram-Bot-Api-Secret-Token` header against the webhook secret.
+- **Identity:** Telegram never gives a bot the user's phone number, and the phone
+  number is the user's ID in this app. Each user shares it once with Telegram's
+  "share my phone number" button (`request_contact`). Accept the shared contact only
+  if its `user_id` is the sender's own; store the link (Telegram user id, chat id,
+  phone number) in `telegram_links`. Until a number is linked, every message gets
+  the share button and nothing reaches the agent.
+- After linking, the same allowlist as WhatsApp applies; a number not on it gets a
+  polite "not set up" reply (the bot is publicly findable, so silence would confuse).
+- Short fixed replies (share prompt, greeting for `/start`, refusals) go in the
+  webhook response; real messages are queued like every other channel.
+- Handle text, photos (largest size), documents (PDF) with captions; voice, video,
+  stickers and locations get the friendly "please send text, a photo or a PDF"
+  reply. One-to-one chats only; edits and groups ignored. De-duplicate on chat and
+  message id.
+- Send with `sendMessage` (4,096 characters), converting the agent's `*bold*` and
+  `_italic_` to Telegram HTML and falling back to plain text if Telegram rejects
+  it; "typing…" with `sendChatAction`; files with `getFile` then download.
+- `/admin` → **Channels**: shows which channels are on; for Telegram the bot name,
+  webhook status and last error; a **Connect Telegram** button (`setWebhook` with
+  the secret, and `setMyCommands` for /reset and /cancel); linked accounts with an
+  Unlink button.
+- The database no longer fixes the list of channel names (the code checks them),
+  so a further channel needs no table rebuild.
 
 ### 1b. Mock WhatsApp (`/mock-wa`, behind admin auth)
 A browser page that looks like a phone chat screen, titled **Mock WhatsApp**, with
@@ -535,7 +564,8 @@ Keep the design open for these and list them in the README's next steps.
 | Background processing | "Pick a mechanism" | **Cloudflare Queues**, one message at a time |
 | Model | CLAUDE_MODEL secret, default `claude-opus-5-5`, effort low/medium | Plain variables in `wrangler.jsonc`; deployment uses **`claude-haiku-5-5` at `medium`**; code default remains Opus at low |
 | Database location | Not specified | **Asia-Pacific** location hint |
-| WhatsApp provider | Meta Cloud API only | Meta **and WhatsApp through Twilio** side by side (`/twilio/webhook`) |
+| WhatsApp provider | Meta Cloud API only | Meta **and WhatsApp through Twilio** side by side (`/twilio/webhook`); a Twilio trial cannot send the agent's replies |
+| Other channels | None | **Telegram** bot (`/telegram/webhook`), with a one-time share-your-phone-number step |
 | Address | Not specified | `https://wa-poc.chooweic.workers.dev` |
 | Guardrails | Spread through the spec | Listed explicitly, split into code-enforced and prompt-based |
 | Backlog | 4 items | Adds **real HR quota integration** |

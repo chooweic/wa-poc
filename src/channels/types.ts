@@ -1,9 +1,11 @@
 // The channel boundary. Everything on the far side of this interface
 // (queue, orchestrator, Claude, drafts, confirm gate, target app) is identical
 // for every channel: Meta's WhatsApp Cloud API, WhatsApp through Twilio,
-// and the /mock-wa simulator.
+// Telegram, and the /mock-wa simulator.
 
-export type ChannelName = 'meta' | 'twilio' | 'mock';
+export type ChannelName = 'meta' | 'twilio' | 'telegram' | 'mock';
+
+export const CHANNEL_NAMES: ChannelName[] = ['meta', 'twilio', 'telegram', 'mock'];
 
 /** Media that arrived with a message. */
 export type InboundMedia =
@@ -16,7 +18,9 @@ export type PendingMedia =
   /** Meta: look the id up to get a short-lived URL, then download. */
   | { source: 'meta'; mediaId: string; mimeType: string; filename?: string }
   /** Twilio: download the URL from the webhook with the account credentials. */
-  | { source: 'twilio'; url: string; mimeType: string; filename?: string };
+  | { source: 'twilio'; url: string; mimeType: string; filename?: string }
+  /** Telegram: look the file id up with getFile, then download. */
+  | { source: 'telegram'; fileId: string; mimeType: string; filename?: string };
 
 /** A message from a user, in a channel-neutral shape. */
 export interface InboundMessage {
@@ -33,8 +37,8 @@ export interface InboundMessage {
   text: string;
   media?: InboundMedia;
   /**
-   * The business address the user wrote to (Twilio: the "To" field). Replies
-   * are sent from it, so they stay in the conversation the user opened.
+   * Where the conversation is happening, for replies: the business number the
+   * user wrote to (Twilio: the "To" field) or the chat id (Telegram).
    */
   receivedOn?: string;
 }
