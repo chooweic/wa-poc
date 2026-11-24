@@ -58,7 +58,10 @@ export interface Config {
   allowedNumbers: Set<string>;
   /** True when every secret the real WhatsApp channel needs is present. */
   metaEnabled: boolean;
-  /** True when every setting WhatsApp-through-Twilio needs is present. */
+  /**
+   * True when the Twilio account settings are present. The sender number is
+   * taken from each incoming message; TWILIO_WHATSAPP_FROM is only a fallback.
+   */
   twilioEnabled: boolean;
   whatsappApiVersion: string;
 }
@@ -95,7 +98,7 @@ export function getConfig(env: Env): Config {
         env.WHATSAPP_APP_SECRET &&
         env.WHATSAPP_VERIFY_TOKEN,
     ),
-    twilioEnabled: Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_WHATSAPP_FROM),
+    twilioEnabled: Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN),
     whatsappApiVersion: env.WHATSAPP_API_VERSION?.trim() || 'v25.0',
   };
 }

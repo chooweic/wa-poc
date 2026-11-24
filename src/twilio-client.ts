@@ -8,7 +8,10 @@ import { normalizePhone } from './env';
 export interface TwilioCredentials {
   accountSid: string;
   authToken: string;
-  /** The WhatsApp sender, e.g. "whatsapp:+14155238886" (the sandbox number) or "+14155238886". */
+  /**
+   * The WhatsApp sender to reply from, e.g. "whatsapp:+14155238886". Normally
+   * the number the user wrote to (taken from the incoming message).
+   */
   from: string;
 }
 
@@ -34,9 +37,10 @@ export class TwilioClient {
       body: new URLSearchParams(fields).toString(),
     });
     if (!response.ok) {
-      // Twilio's error text contains no message content.
+      // Twilio's error text contains no message content. The sender is the
+      // business number (not personal data) and is the usual cause of errors.
       const detail = (await response.text()).slice(0, 500);
-      throw new Error(`Twilio API ${response.status}: ${detail}`);
+      throw new Error(`Twilio API ${response.status} (from ${toWhatsAppAddress(this.creds.from)}): ${detail}`);
     }
   }
 

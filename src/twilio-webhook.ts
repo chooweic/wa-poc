@@ -41,7 +41,14 @@ export function parseTwilioMessage(fields: URLSearchParams): InboundMessage | nu
   const from = fields.get('From') ?? '';
   if (!sid || fields.has('MessageStatus') || !from.toLowerCase().startsWith('whatsapp:')) return null;
 
-  const base = { channel: 'twilio' as const, channelMessageId: sid, from: normalizePhone(from) };
+  const to = fields.get('To') ?? '';
+  const base = {
+    channel: 'twilio' as const,
+    channelMessageId: sid,
+    from: normalizePhone(from),
+    // The number the user wrote to: replies must come from it.
+    ...(to.toLowerCase().startsWith('whatsapp:') ? { receivedOn: to } : {}),
+  };
   const text = fields.get('Body') ?? '';
   const mediaCount = Number.parseInt(fields.get('NumMedia') ?? '0', 10) || 0;
 

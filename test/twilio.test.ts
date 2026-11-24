@@ -76,7 +76,7 @@ describe('Twilio message parsing', () => {
 
   test('text', () => {
     expect(parse({ MessageSid: 'SM1', Body: 'I was sick yesterday' })).toEqual({
-      channel: 'twilio', channelMessageId: 'SM1', from: PHONE, type: 'text', text: 'I was sick yesterday',
+      channel: 'twilio', channelMessageId: 'SM1', from: PHONE, type: 'text', text: 'I was sick yesterday', receivedOn: 'whatsapp:+14155238886',
     });
   });
   test('image with caption, and a PDF', () => {
@@ -134,6 +134,22 @@ describe('Twilio webhook', () => {
     const expectedAuth = `Basic ${btoa(`${TWILIO_SETTINGS.TWILIO_ACCOUNT_SID}:${TWILIO_SETTINGS.TWILIO_AUTH_TOKEN}`)}`;
     expect(calls[1].auth).toBe(expectedAuth);
     expect((await env.DB.prepare('SELECT channel FROM conversations').first<any>()).channel).toBe('twilio');
+  });
+
+  test('replies come from the number the user wrote to, not from TWILIO_WHATSAPP_FROM (avoids error 21654)', async () => {
+    const env = twilioEnv();
+    const calls = stubTwilio();
+    await sendViaTwilio(env, createDeps(env, new ScriptedClaude([say('hi back')])), twilioFields({ MessageSid: 'SM11', Body: 'hi', To: 'whatsapp:+17372212163' }));
+    const sent = calls.find((c) => c.url.endsWith('/Messages.json'));
+    expect(sent?.form).toMatchObject({ From: 'whatsapp:+17372212163', To: 'whatsapp:+6590000001', Body: 'hi back' });
+  });
+
+  test('works without TWILIO_WHATSAPP_FROM, since the sender comes from each message', async () => {
+    const env = twilioEnv({ TWILIO_WHATSAPP_FROM: '' });
+    const calls = stubTwilio();
+    const res = await sendViaTwilio(env, createDeps(env, new ScriptedClaude([say('ok')])), twilioFields({ MessageSid: 'SM12', Body: 'hi' }));
+    expect(res.status).toBe(200);
+    expect(calls.find((c) => c.url.endsWith('/Messages.json'))?.form.From).toBe('whatsapp:+14155238886');
   });
 
   test('a repeated delivery is processed once', async () => {

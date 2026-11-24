@@ -314,7 +314,7 @@ Locally these go in `.dev.vars`. In production set them with
 | `ALLOWED_WHATSAPP_NUMBERS` | for real WhatsApp (Meta or Twilio) | Comma-separated numbers that may use the bot, e.g. `6591234567` |
 | `TWILIO_ACCOUNT_SID` | for Twilio | Your Twilio Account SID (starts with `AC`) |
 | `TWILIO_AUTH_TOKEN` | for Twilio | Your Twilio Auth Token; also verifies the webhook signature |
-| `TWILIO_WHATSAPP_FROM` | for Twilio | The WhatsApp sender, e.g. the sandbox number `whatsapp:+14155238886` |
+| `TWILIO_WHATSAPP_FROM` | optional | Fallback sender, e.g. `whatsapp:+14155238886`. Normally replies go out from the number the user wrote to, taken from each message. |
 
 Without the `WHATSAPP_*` secrets the Meta channel is simply off; without the
 `TWILIO_*` ones the Twilio channel is off; `/mock-wa` works on its own either
@@ -397,9 +397,10 @@ For testing, Twilio's **WhatsApp Sandbox** needs no Meta business account:
    phone send `join <your code>` to the sandbox number on WhatsApp.
 3. On the console home page, copy the **Account SID** and **Auth Token**.
 4. In Cloudflare, under **wa-poc → Settings → Variables and Secrets**, add as
-   type **Secret**: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and
-   `TWILIO_WHATSAPP_FROM` (the sandbox number, e.g. `whatsapp:+14155238886`).
-   Make sure your phone number is in `ALLOWED_WHATSAPP_NUMBERS`.
+   type **Secret**: `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN`. Make sure
+   your phone number is in `ALLOWED_WHATSAPP_NUMBERS`. The app replies from
+   whichever number the user wrote to, so the sender number doesn't need to be
+   set; `TWILIO_WHATSAPP_FROM` is only a fallback.
 5. Back on the sandbox page, open **Sandbox settings** and set **When a message
    comes in** to `https://wa-poc.chooweic.workers.dev/twilio/webhook`, method
    **POST**. Type the address exactly like that: the signature covers the exact

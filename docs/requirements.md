@@ -80,7 +80,7 @@ because that is content business users write.
 **Secrets** (Worker secrets in production, `.dev.vars` locally; never hard-coded):
 ANTHROPIC_API_KEY, ADMIN_PASSWORD, WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID,
 WHATSAPP_BUSINESS_ACCOUNT_ID, WHATSAPP_APP_SECRET, WHATSAPP_VERIFY_TOKEN,
-ALLOWED_WHATSAPP_NUMBERS, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM
+ALLOWED_WHATSAPP_NUMBERS, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM (optional fallback)
 
 **Plain settings** (in `wrangler.jsonc` under `vars`; `.dev.vars` overrides locally):
 | Name | Value in the deployment | Notes |
@@ -129,6 +129,10 @@ Without ADMIN_PASSWORD every page except `/webhook` stays locked.
   Ignore status callbacks and non-WhatsApp (SMS) messages; voice notes, video and
   other kinds get the friendly "please send text, a photo or a PDF" reply.
 - Same allowlist (ALLOWED_WHATSAPP_NUMBERS) as Meta.
+- Reply **from the number the user wrote to** (the inbound `To`, stored with the
+  message), never from a fixed setting: a reply from any other number counts as
+  the business starting a conversation, which WhatsApp only allows with a
+  template. `TWILIO_WHATSAPP_FROM` is a fallback only.
 - Outbound through Twilio's Messages API, split at 1,600 characters. Typing
   indicator through Twilio's WhatsApp typing API (public beta; failures ignored).
 - Media: check the declared type first, download with the account credentials

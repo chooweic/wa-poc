@@ -32,6 +32,11 @@ export interface InboundMessage {
    */
   text: string;
   media?: InboundMedia;
+  /**
+   * The business address the user wrote to (Twilio: the "To" field). Replies
+   * are sent from it, so they stay in the conversation the user opened.
+   */
+  receivedOn?: string;
 }
 
 export interface MessagingChannel {

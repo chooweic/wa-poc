@@ -105,7 +105,8 @@ export async function processJob(env: Env, job: QueueJob, deps: OrchestratorDeps
   const conversation = await getConversation(env.DB, message.conversation_id);
   if (!conversation) return;
 
-  const channel = createChannel(env, conversation.channel);
+  // Reply from the address the user wrote to, so the reply lands in their conversation.
+  const channel = createChannel(env, conversation.channel, message.received_on);
   const send = async (text: string): Promise<void> => {
     for (const chunk of splitText(text, channel.maxTextLength ?? MAX_TEXT_LENGTH)) await channel.sendText(conversation.phone_number, chunk);
     await insertOutbound(env.DB, conversation.id, text);

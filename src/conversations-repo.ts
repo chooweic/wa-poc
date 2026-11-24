@@ -19,6 +19,8 @@ export interface MessageRow {
   type: string;
   text: string;
   media_ref: string | null;
+  /** Inbound only: the business address the user wrote to; replies go out from it. */
+  received_on: string | null;
   evidence_id: string | null;
   status: string;
   created_at: string;
@@ -66,10 +68,10 @@ export async function insertInbound(
   const evidenceId = msg.media?.source === 'stored' ? msg.media.evidenceId : null;
   const result = await db
     .prepare(
-      `INSERT OR IGNORE INTO messages (conversation_id, direction, channel_message_id, type, text, media_ref, evidence_id, status)
-       VALUES (?, 'in', ?, ?, ?, ?, ?, 'queued')`,
+      `INSERT OR IGNORE INTO messages (conversation_id, direction, channel_message_id, type, text, media_ref, evidence_id, received_on, status)
+       VALUES (?, 'in', ?, ?, ?, ?, ?, ?, 'queued')`,
     )
-    .bind(conversationId, msg.channelMessageId, msg.type, msg.text, mediaRef, evidenceId)
+    .bind(conversationId, msg.channelMessageId, msg.type, msg.text, mediaRef, evidenceId, msg.receivedOn ?? null)
     .run();
   if (!result.meta.changes) return null;
   await db.prepare(`UPDATE conversations SET last_message_at = ${NOW} WHERE id = ?`).bind(conversationId).run();
