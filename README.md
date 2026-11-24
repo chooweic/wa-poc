@@ -17,6 +17,9 @@ transactions on another application, for example applying for leave.
 Everything runs on Cloudflare's free tier, and there is a browser chat page,
 **Mock WhatsApp**, so you can try the whole thing without a phone or a Meta account.
 
+The full requirements, including the changes made since the original build
+prompt, are in [docs/requirements.md](docs/requirements.md).
+
 ## Contents
 
 1. [The four pages](#the-four-pages)
