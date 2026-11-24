@@ -494,7 +494,11 @@ ${e.extracted_data?.length ? html`<br><span class="sub">${e.extracted_data.map((
 // ------------------------------------------ conversations (read-only)
 
 const channelPill = (channel: string): Raw =>
-  channel === 'mock' ? html`<span class="pill warn">Simulated</span>` : html`<span class="pill ok">WhatsApp</span>`;
+  channel === 'mock'
+    ? html`<span class="pill warn">Simulated</span>`
+    : channel === 'twilio'
+      ? html`<span class="pill ok">WhatsApp via Twilio</span>`
+      : html`<span class="pill ok">WhatsApp</span>`;
 
 async function conversationsRoutes(env: Env, parts: string[]): Promise<Response> {
   if (parts[0]) {

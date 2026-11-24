@@ -8,7 +8,7 @@
 
 import { AnthropicClaudeClient } from './claude/client';
 import { createChannel } from './channels';
-import { splitText, type InboundMedia, type InboundMessage, type MessagingChannel } from './channels/types';
+import { MAX_TEXT_LENGTH, splitText, type InboundMessage, type MessagingChannel, type PendingMedia } from './channels/types';
 import {
   getConversation,
   getMessage,
@@ -73,17 +73,17 @@ export function createOrchestratorDeps(env: Env): OrchestratorDeps {
   };
 }
 
-/** Meta only: copy the file from Meta's servers into R2. Returns a rejection message when it is not acceptable. */
+/** Meta and Twilio: copy the file from the channel's servers into R2. Returns a rejection message when it is not acceptable. */
 async function fetchPendingMedia(
   env: Env,
   channel: MessagingChannel,
   conversation: Conversation,
   message: MessageRow,
 ): Promise<{ evidence: EvidenceRecord } | { rejection: string }> {
-  const ref = safeJsonParse<Extract<InboundMedia, { source: 'meta' }> | null>(message.media_ref, null);
+  const ref = safeJsonParse<PendingMedia | null>(message.media_ref, null);
   if (!ref || !channel.downloadMedia) return { rejection: "Sorry, I couldn't open that file. Please send it again." };
   const maxBytes = getConfig(env).maxUploadBytes;
-  const file = await channel.downloadMedia(ref.mediaId, (mime, size) => !mediaRejection(mime, size || 1, maxBytes));
+  const file = await channel.downloadMedia(ref, (mime, size) => !mediaRejection(mime, size || 1, maxBytes));
   const rejection = mediaRejection(file.mimeType, file.bytes ? file.bytes.byteLength : file.sizeBytes || 1, maxBytes);
   if (rejection || !file.bytes) return { rejection: rejection ?? "Sorry, I couldn't open that file. Please send it again." };
   const evidence = await storeEvidence(env.DB, env.EVIDENCE, {
@@ -107,7 +107,7 @@ export async function processJob(env: Env, job: QueueJob, deps: OrchestratorDeps
 
   const channel = createChannel(env, conversation.channel);
   const send = async (text: string): Promise<void> => {
-    for (const chunk of splitText(text)) await channel.sendText(conversation.phone_number, chunk);
+    for (const chunk of splitText(text, channel.maxTextLength ?? MAX_TEXT_LENGTH)) await channel.sendText(conversation.phone_number, chunk);
     await insertOutbound(env.DB, conversation.id, text);
   };
 

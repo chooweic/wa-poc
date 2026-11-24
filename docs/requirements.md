@@ -67,7 +67,9 @@ because that is content business users write.
   (10,000 operations a day, about 3,000 messages) and a consumer may run up to
   15 minutes. Workers Free allows 10 ms of CPU per invocation; waiting on Claude or
   D1 does not count, but encoding an image does, so uploads are capped (5 MB).
-- WhatsApp: Meta WhatsApp Cloud API with Meta's free test number
+- WhatsApp: Meta WhatsApp Cloud API with Meta's free test number, **and, alongside
+  it, WhatsApp through Twilio** (Twilio's WhatsApp Sandbox for testing) as an
+  alternative while the Meta business account is being sorted out
 - AI: Claude API via the official `@anthropic-ai/sdk`, using tool use on the Messages
   API. Before writing Claude code, check the current SDK and model conventions in the
   Claude API docs or the claude-api skill (thinking, effort, `tool_choice` and
@@ -78,7 +80,7 @@ because that is content business users write.
 **Secrets** (Worker secrets in production, `.dev.vars` locally; never hard-coded):
 ANTHROPIC_API_KEY, ADMIN_PASSWORD, WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID,
 WHATSAPP_BUSINESS_ACCOUNT_ID, WHATSAPP_APP_SECRET, WHATSAPP_VERIFY_TOKEN,
-ALLOWED_WHATSAPP_NUMBERS
+ALLOWED_WHATSAPP_NUMBERS, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM
 
 **Plain settings** (in `wrangler.jsonc` under `vars`; `.dev.vars` overrides locally):
 | Name | Value in the deployment | Notes |
@@ -94,7 +96,8 @@ includes thinking), `HISTORY_MESSAGES` (20), `MAX_UPLOAD_MB` (5),
 `WHATSAPP_API_VERSION`, `CLAUDE_STRICT_TOOLS` (`on`).
 
 The app must run with **only** ANTHROPIC_API_KEY and ADMIN_PASSWORD set. Without the
-WHATSAPP_* secrets the real channel is disabled and Mock WhatsApp works on its own.
+WHATSAPP_* secrets the Meta channel is disabled; without the TWILIO_* settings the
+Twilio channel is disabled; Mock WhatsApp works on its own.
 Without ADMIN_PASSWORD every page except `/webhook` stays locked.
 
 ## Functional requirements
@@ -113,6 +116,25 @@ Without ADMIN_PASSWORD every page except `/webhook` stays locked.
 - Reject unsupported types or oversized files with a friendly message.
 - Outbound: text replies via the Graph API, split at 4096 characters. Mark the
   message read and show the typing indicator while processing.
+
+### 1a. WhatsApp through Twilio (`/twilio/webhook`), alongside Meta
+- POST only: Twilio's "when a message comes in" webhook (form-encoded fields).
+- Verify `X-Twilio-Signature`: HMAC-SHA1 keyed with the auth token over the exact
+  webhook URL followed by every field name and value sorted by name, base64.
+  Implemented with the platform's crypto (Twilio's SDK is not used on Workers) and
+  tested against Twilio's documented example.
+- Answer 200 straight away with an empty TwiML response; hand the work to the queue.
+- Parse `From` (`whatsapp:+65…` → digits), `Body`, `MessageSid` (de-duplication and
+  the typing indicator), and one attachment from `MediaUrl0` / `MediaContentType0`.
+  Ignore status callbacks and non-WhatsApp (SMS) messages; voice notes, video and
+  other kinds get the friendly "please send text, a photo or a PDF" reply.
+- Same allowlist (ALLOWED_WHATSAPP_NUMBERS) as Meta.
+- Outbound through Twilio's Messages API, split at 1,600 characters. Typing
+  indicator through Twilio's WhatsApp typing API (public beta; failures ignored).
+- Media: check the declared type first, download with the account credentials
+  (only from twilio.com), check the size, store in R2.
+- Conversations record the channel `twilio`; `/admin` labels them "WhatsApp via
+  Twilio". The database constraint on the channel allows `meta`, `twilio` and `mock`.
 
 ### 1b. Mock WhatsApp (`/mock-wa`, behind admin auth)
 A browser page that looks like a phone chat screen, titled **Mock WhatsApp**, with
@@ -133,6 +155,7 @@ look (bubbles, timestamps, ticks); no WhatsApp logo or branding.
 - **Same pipeline:** sending and receiving sit behind a `MessagingChannel` interface
   with two implementations:
   - `MetaWhatsAppChannel`: the real webhook, Graph API send and media download
+  - `TwilioWhatsAppChannel`: the Twilio webhook, Messages API send and media download
   - `MockWaChannel`: `/mock-wa` posts the message and the file goes straight to R2
     (no Meta download). Replies are stored in a `mock_wa_messages` table for the page
     to poll.
@@ -429,7 +452,9 @@ payload, the drafts view, and human review for `pending_review` records.
   logged for quota reasons only; no balance checks), test-user management and the
   demo reset, the cached prompt prefix staying byte-identical, images sent only on
   arrival, and a Mock WhatsApp message and a Meta webhook message producing the same
-  orchestrator input and the same Claude request.
+  orchestrator input and the same Claude request; the same for a Twilio message;
+  Twilio signature checks (including Twilio's documented example) and parsing; and
+  that the migration adding the `twilio` channel keeps every row and rule.
 - `.dev.vars.example` committed; `.dev.vars` git-ignored.
 
 ## Deliverables
@@ -506,5 +531,7 @@ Keep the design open for these and list them in the README's next steps.
 | Background processing | "Pick a mechanism" | **Cloudflare Queues**, one message at a time |
 | Model | CLAUDE_MODEL secret, default `claude-opus-5-5`, effort low/medium | Plain variables in `wrangler.jsonc`; deployment uses **`claude-haiku-5-5` at `medium`**; code default remains Opus at low |
 | Database location | Not specified | **Asia-Pacific** location hint |
+| WhatsApp provider | Meta Cloud API only | Meta **and WhatsApp through Twilio** side by side (`/twilio/webhook`) |
+| Address | Not specified | `https://wa-poc.chooweic.workers.dev` |
 | Guardrails | Spread through the spec | Listed explicitly, split into code-enforced and prompt-based |
 | Backlog | 4 items | Adds **real HR quota integration** |

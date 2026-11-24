@@ -1,6 +1,7 @@
 // Worker entry point: HTTP routes and the queue consumer.
 //
 //   /webhook                 Meta WhatsApp webhook (public; verified by signature)
+//   /twilio/webhook          WhatsApp via Twilio webhook (public; verified by signature)
 //   /mock-wa                 Mock WhatsApp (chat simulator)       (admin login)
 //   /mock-app                mock target app dashboard           (admin login)
 //   /mock-api/transactions   the mock target app's one API endpoint (admin login)
@@ -17,16 +18,22 @@ import { handleAdmin } from './ui/admin';
 import mockAppPage from './ui/mock-app.html';
 import { handleMockWa } from './ui/mock-wa';
 import { htmlResponse, json, redirect } from './util';
+import { handleTwilioWebhook } from './twilio-webhook';
 import { handleWebhookPost, handleWebhookVerify } from './webhook';
 
 async function route(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, '') || '/';
 
-  // The only public route. Meta proves who it is with a signature, not a password.
+  // The public routes. Meta and Twilio prove who they are with a signature, not a password.
   if (path === '/webhook') {
     if (request.method === 'GET') return handleWebhookVerify(request, env);
     if (request.method === 'POST') return handleWebhookPost(request, env);
+    return new Response('Method not allowed', { status: 405 });
+  }
+
+  if (path === '/twilio/webhook') {
+    if (request.method === 'POST') return handleTwilioWebhook(request, env);
     return new Response('Method not allowed', { status: 405 });
   }
 

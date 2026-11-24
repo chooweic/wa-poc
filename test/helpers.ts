@@ -215,3 +215,46 @@ export async function sendViaWebhook(env: TestEnv, deps: OrchestratorDeps, paylo
   await drainQueue(env, deps);
   return response.status;
 }
+
+// ------------------------------------------------- Twilio
+
+import { computeTwilioSignature, handleTwilioWebhook } from '../src/twilio-webhook';
+
+export const TWILIO_SETTINGS = {
+  TWILIO_ACCOUNT_SID: 'AC00000000000000000000000000000000',
+  TWILIO_AUTH_TOKEN: 'twilio-token',
+  TWILIO_WHATSAPP_FROM: 'whatsapp:+14155238886',
+};
+
+export const TWILIO_URL = 'https://app.test/twilio/webhook';
+
+/** Form fields Twilio sends for an incoming WhatsApp message. */
+export function twilioFields(fields: Record<string, string>): Record<string, string> {
+  return {
+    SmsMessageSid: fields.MessageSid ?? 'SM0001',
+    NumMedia: '0',
+    ProfileName: 'Test',
+    SmsSid: fields.MessageSid ?? 'SM0001',
+    WaId: '6590000001',
+    SmsStatus: 'received',
+    To: 'whatsapp:+14155238886',
+    NumSegments: '1',
+    MessageType: 'text',
+    AccountSid: TWILIO_SETTINGS.TWILIO_ACCOUNT_SID,
+    From: 'whatsapp:+6590000001',
+    ApiVersion: '2010-04-01',
+    ...fields,
+  };
+}
+
+/** Posts a signed Twilio webhook to the real handler, then runs the queue. Returns the HTTP response. */
+export async function sendViaTwilio(env: TestEnv, deps: OrchestratorDeps, fields: Record<string, string>, signature?: string) {
+  const body = new URLSearchParams(fields).toString();
+  const sig = signature ?? (await computeTwilioSignature(TWILIO_URL, Object.entries(fields), env.TWILIO_AUTH_TOKEN || 'unset'));
+  const response = await handleTwilioWebhook(
+    new Request(TWILIO_URL, { method: 'POST', headers: { 'x-twilio-signature': sig, 'content-type': 'application/x-www-form-urlencoded' }, body }),
+    env,
+  );
+  await drainQueue(env, deps);
+  return response;
+}

@@ -1,7 +1,7 @@
 // The real WhatsApp channel (Meta WhatsApp Cloud API).
 
 import { WhatsAppClient } from '../whatsapp-client';
-import type { MessagingChannel } from './types';
+import type { MessagingChannel, PendingMedia } from './types';
 
 export class MetaWhatsAppChannel implements MessagingChannel {
   readonly name = 'meta' as const;
@@ -16,7 +16,8 @@ export class MetaWhatsAppChannel implements MessagingChannel {
     return this.client.markReadAndTyping(channelMessageId);
   }
 
-  downloadMedia(mediaId: string, accept: (mimeType: string, sizeBytes: number) => boolean) {
-    return this.client.downloadMedia(mediaId, accept);
+  async downloadMedia(media: PendingMedia, accept: (mimeType: string, sizeBytes: number) => boolean) {
+    if (media.source !== 'meta') throw new Error(`Meta channel cannot download ${media.source} media`);
+    return this.client.downloadMedia(media.mediaId, accept);
   }
 }

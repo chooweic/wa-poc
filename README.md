@@ -28,14 +28,15 @@ prompt, are in [docs/requirements.md](docs/requirements.md).
 4. [Deploy to Cloudflare](#deploy-to-cloudflare)
 5. [Secrets and settings](#secrets-and-settings)
 6. [Connect a real WhatsApp number](#connect-a-real-whatsapp-number)
-7. [Test users](#test-users)
-8. [Demo script](#demo-script)
-9. [Synthetic test images](#synthetic-test-images)
-10. [Choosing the Claude model](#choosing-the-claude-model)
-11. [Logs and tests](#logs-and-tests)
-12. [Privacy and retention](#privacy-and-retention)
-13. [Limits to know about](#limits-to-know-about)
-14. [Next steps and backlog](#next-steps-and-backlog)
+7. [WhatsApp through Twilio](#whatsapp-through-twilio)
+8. [Test users](#test-users)
+9. [Demo script](#demo-script)
+10. [Synthetic test images](#synthetic-test-images)
+11. [Choosing the Claude model](#choosing-the-claude-model)
+12. [Logs and tests](#logs-and-tests)
+13. [Privacy and retention](#privacy-and-retention)
+14. [Limits to know about](#limits-to-know-about)
+15. [Next steps and backlog](#next-steps-and-backlog)
 
 ## The four pages
 
@@ -48,8 +49,10 @@ All of them ask for a login: any username, and the `ADMIN_PASSWORD` you set.
 | `/admin` | Knowledge base (for business users), Technical settings, Drafts, Conversations, Test users and Demo reset buttons. |
 | `/evidence/<id>` | An uploaded file. Only reachable with the admin login. |
 
-`/webhook` is the only public address. It is for Meta, and every request to it
-must carry Meta's signature.
+The live app is at <https://wa-poc.chooweic.workers.dev>.
+
+`/webhook` (for Meta) and `/twilio/webhook` (for Twilio) are the only public
+addresses. Every request to them must carry Meta's or Twilio's signature.
 
 ### Screenshots
 
@@ -104,30 +107,34 @@ simulated on your machine by Wrangler.
 ## How it works
 
 ```
- WhatsApp (Meta) ──► /webhook ─┐
-                               ├─► store message ─► Queue ─► orchestrator ─► reply
- /mock-wa page ──► /mock-wa/api ┘                              │
-                                                               ├─ commands: /reset, /cancel
-                                                               ├─ "YES" on a draft awaiting confirmation ─► submit
-                                                               └─ otherwise: Claude turn with tools
-                                                                                 │
-                                       TargetAppClient.submit(payload) ◄─────────┘ (never called by Claude)
-                                                │
-                                   mock target app (D1 tables, API log)
+ WhatsApp (Meta)   ──► /webhook ────────┐
+ WhatsApp (Twilio) ──► /twilio/webhook ─┼─► store message ─► Queue ─► orchestrator ─► reply
+ /mock-wa page     ──► /mock-wa/api ────┘                              │
+                                                                       ├─ commands: /reset, /cancel
+                                                                       ├─ "YES" on a draft awaiting confirmation ─► submit
+                                                                       └─ otherwise: Claude turn with tools
+                                                                                         │
+                                               TargetAppClient.submit(payload) ◄─────────┘ (never called by Claude)
+                                                        │
+                                           mock target app (D1 tables, API log)
 ```
 
-### One pipeline, two channels
+### One pipeline, three channels
 
-Sending and receiving sit behind a `MessagingChannel` interface with two
-implementations:
+Sending and receiving sit behind a `MessagingChannel` interface with three
+implementations, which can all be on at once:
 
-- `MetaWhatsAppChannel`: the real webhook, Graph API send and media download.
+- `MetaWhatsAppChannel`: WhatsApp through Meta's Cloud API (webhook, Graph API
+  send, media download).
+- `TwilioWhatsAppChannel`: WhatsApp through Twilio, as an alternative while a
+  Meta business account is being sorted out (see
+  [WhatsApp through Twilio](#whatsapp-through-twilio)).
 - `MockWaChannel`: the `/mock-wa` page. Files go straight to R2 and replies
   are stored in `mock_wa_messages` for the page to poll.
 
 Everything after that is the same code: queue, orchestrator, Claude, drafts,
-checklist, confirmation gate and target app. A test checks that the same
-message through either channel gives Claude an identical request.
+checklist, confirmation gate and target app. Tests check that the same message
+through Meta, Twilio or Mock WhatsApp gives Claude an identical request.
 
 ### Background processing: Cloudflare Queues
 
@@ -208,8 +215,10 @@ src/
   index.ts             routes and the queue consumer
   webhook.ts           Meta webhook: handshake, signature, parsing
   whatsapp-client.ts   Graph API: send, typing indicator, media download
-  channels/            MessagingChannel + the Meta and Mock WhatsApp implementations
-  pipeline.ts          store → queue → process, shared by both channels
+  twilio-webhook.ts    Twilio webhook: signature, parsing
+  twilio-client.ts     Twilio API: send, typing indicator, media download
+  channels/            MessagingChannel + the Meta, Twilio and Mock WhatsApp implementations
+  pipeline.ts          store → queue → process, shared by all channels
   sender.ts            the one place that decides who the sender is
   orchestrator.ts      commands, the YES gate, the Claude tool loop, submission
   claude/              API client, prompt and KB rendering, tools
@@ -302,11 +311,15 @@ Locally these go in `.dev.vars`. In production set them with
 | `WHATSAPP_BUSINESS_ACCOUNT_ID` | for real WhatsApp | Kept for reference; not used by the code yet |
 | `WHATSAPP_APP_SECRET` | for real WhatsApp | Verifies the webhook signature |
 | `WHATSAPP_VERIFY_TOKEN` | for real WhatsApp | Any text you choose; used once when registering the webhook |
-| `ALLOWED_WHATSAPP_NUMBERS` | for real WhatsApp | Comma-separated numbers that may use the bot, e.g. `6591234567` |
+| `ALLOWED_WHATSAPP_NUMBERS` | for real WhatsApp (Meta or Twilio) | Comma-separated numbers that may use the bot, e.g. `6591234567` |
+| `TWILIO_ACCOUNT_SID` | for Twilio | Your Twilio Account SID (starts with `AC`) |
+| `TWILIO_AUTH_TOKEN` | for Twilio | Your Twilio Auth Token; also verifies the webhook signature |
+| `TWILIO_WHATSAPP_FROM` | for Twilio | The WhatsApp sender, e.g. the sandbox number `whatsapp:+14155238886` |
 
-Without the `WHATSAPP_*` secrets the real channel is simply off and `/mock-wa`
-works on its own. `ALLOWED_WHATSAPP_NUMBERS` applies to the real channel only;
-any number can be used on `/mock-wa`.
+Without the `WHATSAPP_*` secrets the Meta channel is simply off; without the
+`TWILIO_*` ones the Twilio channel is off; `/mock-wa` works on its own either
+way. `ALLOWED_WHATSAPP_NUMBERS` applies to Meta and Twilio; any number can be
+used on `/mock-wa`.
 
 Other settings, in `wrangler.jsonc` under `vars`: `APP_TIMEZONE` (default
 `Asia/Singapore`, used for "today" and deadlines) and `TARGET_APP_MODE`
@@ -368,6 +381,49 @@ names may differ slightly.
 If nothing comes back, see [Logs and tests](#logs-and-tests). The usual causes
 are an expired access token, a phone not added as a test recipient, or a number
 missing from `ALLOWED_WHATSAPP_NUMBERS` (such messages are ignored silently).
+
+## WhatsApp through Twilio
+
+An alternative way in, for while the Meta business account is not ready. Users
+still use WhatsApp; Twilio sits between them and this app. It runs alongside
+the Meta channel, and either or both can be on.
+
+For testing, Twilio's **WhatsApp Sandbox** needs no Meta business account:
+
+1. Create a Twilio account at <https://www.twilio.com> (a trial includes some
+   credit; Twilio charges per message).
+2. In the Twilio console, open **Messaging → Try it out → Send a WhatsApp
+   message**. Note the **sandbox number** and the **join code**, and from your
+   phone send `join <your code>` to the sandbox number on WhatsApp.
+3. On the console home page, copy the **Account SID** and **Auth Token**.
+4. In Cloudflare, under **wa-poc → Settings → Variables and Secrets**, add as
+   type **Secret**: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and
+   `TWILIO_WHATSAPP_FROM` (the sandbox number, e.g. `whatsapp:+14155238886`).
+   Make sure your phone number is in `ALLOWED_WHATSAPP_NUMBERS`.
+5. Back on the sandbox page, open **Sandbox settings** and set **When a message
+   comes in** to `https://wa-poc.chooweic.workers.dev/twilio/webhook`, method
+   **POST**. Type the address exactly like that: the signature covers the exact
+   address, so an extra `/` at the end makes every message fail with 403.
+6. Add your number as a test user (see [Test users](#test-users)) and send
+   `hi` to the sandbox number.
+
+Things to know about the sandbox:
+
+- It is a shared Twilio number with no business profile, for testing only.
+- Each tester must send the join message, and membership lapses after **3 days**:
+  send `join <your code>` again.
+- Replies are only allowed within 24 hours of the user's last message, as on
+  every WhatsApp channel.
+- A conversation through Twilio is separate from one through Meta or Mock
+  WhatsApp, even for the same phone number. `/admin` labels it "WhatsApp via
+  Twilio".
+- Twilio allows 1,600 characters per message, so long replies are split into
+  more messages than on Meta.
+- The typing indicator uses Twilio's WhatsApp typing API, which is in public
+  beta. If it fails, the reply still goes out.
+
+For real users, register your own WhatsApp sender with Twilio (this still goes
+through Meta's business checks), then change `TWILIO_WHATSAPP_FROM`.
 
 ## Test users
 
@@ -588,8 +644,9 @@ automatic deletion.
   default access token is temporary.
 - **The typing indicator** on real WhatsApp disappears after about 25 seconds,
   so it may vanish before a long turn finishes.
-- **One conversation per channel.** The same phone number on `/mock-wa` and on
-  real WhatsApp has two separate conversations and drafts.
+- **One conversation per channel.** The same phone number on `/mock-wa`, on
+  WhatsApp through Meta and on WhatsApp through Twilio has a separate
+  conversation and draft on each.
 
 ## Next steps and backlog
 

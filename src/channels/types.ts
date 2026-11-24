@@ -1,15 +1,22 @@
 // The channel boundary. Everything on the far side of this interface
 // (queue, orchestrator, Claude, drafts, confirm gate, target app) is identical
-// for the real WhatsApp channel and the /mock-wa simulator.
+// for every channel: Meta's WhatsApp Cloud API, WhatsApp through Twilio,
+// and the /mock-wa simulator.
 
-export type ChannelName = 'meta' | 'mock';
+export type ChannelName = 'meta' | 'twilio' | 'mock';
 
 /** Media that arrived with a message. */
 export type InboundMedia =
   /** Already stored in R2 (the simulator uploads straight to R2). */
   | { source: 'stored'; evidenceId: string }
-  /** Still on Meta's servers; the queue consumer downloads it. */
-  | { source: 'meta'; mediaId: string; mimeType: string; filename?: string };
+  | PendingMedia;
+
+/** Media still on the channel's servers; the queue consumer downloads it into R2. */
+export type PendingMedia =
+  /** Meta: look the id up to get a short-lived URL, then download. */
+  | { source: 'meta'; mediaId: string; mimeType: string; filename?: string }
+  /** Twilio: download the URL from the webhook with the account credentials. */
+  | { source: 'twilio'; url: string; mimeType: string; filename?: string };
 
 /** A message from a user, in a channel-neutral shape. */
 export interface InboundMessage {
@@ -29,6 +36,8 @@ export interface InboundMessage {
 
 export interface MessagingChannel {
   readonly name: ChannelName;
+  /** The longest text one message may carry on this channel (default MAX_TEXT_LENGTH). */
+  readonly maxTextLength?: number;
   /** Sends one text message (already split to the channel's size limit). */
   sendText(to: string, text: string): Promise<void>;
   /** Shows "read" / "typing…" for the message being processed, where the channel supports it. */
@@ -39,12 +48,12 @@ export interface MessagingChannel {
    * size is not acceptable; `mimeType` and `sizeBytes` are still reported.
    */
   downloadMedia?(
-    mediaId: string,
+    media: PendingMedia,
     accept: (mimeType: string, sizeBytes: number) => boolean,
   ): Promise<{ bytes: ArrayBuffer | null; mimeType: string; sizeBytes: number }>;
 }
 
-/** WhatsApp rejects text bodies longer than this. */
+/** Meta's WhatsApp API rejects text bodies longer than this. */
 export const MAX_TEXT_LENGTH = 4096;
 
 /**

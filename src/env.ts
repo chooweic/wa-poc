@@ -30,6 +30,10 @@ export interface Env {
   WHATSAPP_API_VERSION?: string;
   ALLOWED_WHATSAPP_NUMBERS?: string;
 
+  TWILIO_ACCOUNT_SID?: string;
+  TWILIO_AUTH_TOKEN?: string;
+  TWILIO_WHATSAPP_FROM?: string;
+
   ADMIN_PASSWORD?: string;
 
   APP_TIMEZONE?: string;
@@ -54,6 +58,8 @@ export interface Config {
   allowedNumbers: Set<string>;
   /** True when every secret the real WhatsApp channel needs is present. */
   metaEnabled: boolean;
+  /** True when every setting WhatsApp-through-Twilio needs is present. */
+  twilioEnabled: boolean;
   whatsappApiVersion: string;
 }
 
@@ -89,6 +95,7 @@ export function getConfig(env: Env): Config {
         env.WHATSAPP_APP_SECRET &&
         env.WHATSAPP_VERIFY_TOKEN,
     ),
+    twilioEnabled: Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_WHATSAPP_FROM),
     whatsappApiVersion: env.WHATSAPP_API_VERSION?.trim() || 'v25.0',
   };
 }

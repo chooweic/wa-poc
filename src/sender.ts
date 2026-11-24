@@ -25,7 +25,7 @@ export function resolveSender(config: Config, channel: ChannelName, rawFrom: str
   // The simulator sits behind admin login, so any number may be used there
   // (including unknown ones, to test how the target app rejects them).
   if (channel === 'mock') return { allowed: true, phoneNumber };
-  // ALLOWED_WHATSAPP_NUMBERS applies to the real Meta channel only.
+  // ALLOWED_WHATSAPP_NUMBERS applies to the real WhatsApp channels (Meta and Twilio).
   if (config.allowedNumbers.has(phoneNumber)) return { allowed: true, phoneNumber };
   return { allowed: false, phoneNumber, reason: 'not_in_allowlist' };
 }

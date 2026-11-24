@@ -62,7 +62,7 @@ export async function insertInbound(
   conversationId: number,
   msg: InboundMessage,
 ): Promise<number | null> {
-  const mediaRef = msg.media?.source === 'meta' ? JSON.stringify(msg.media) : null;
+  const mediaRef = msg.media && msg.media.source !== 'stored' ? JSON.stringify(msg.media) : null;
   const evidenceId = msg.media?.source === 'stored' ? msg.media.evidenceId : null;
   const result = await db
     .prepare(
