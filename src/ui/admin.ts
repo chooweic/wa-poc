@@ -10,13 +10,10 @@ import { getDraft, listDraftEvidence, listDrafts, type Draft } from '../drafts-r
 import type { Env } from '../env';
 import {
   deleteRow,
-  getArticle,
   getReason,
   getType,
-  listArticles,
   listTypesWithReasons,
   moveRow,
-  saveArticle,
   saveReason,
   saveReasonSchema,
   saveType,
@@ -121,7 +118,7 @@ ${body}
 const activePill = (active: number | boolean): Raw =>
   active ? html`<span class="pill ok">Active</span>` : html`<span class="pill">Inactive</span>`;
 
-function rowActions(kind: 'types' | 'reasons' | 'articles', id: number, active: number, what: string): Raw {
+function rowActions(kind: 'types' | 'reasons', id: number, active: number, what: string): Raw {
   const base = `/admin/kb/${kind}/${id}`;
   return html`<div class="actions">
     <a class="btn" href="${base}">Edit</a>
@@ -138,18 +135,24 @@ const EVIDENCE_LABEL: Record<string, string> = { required: 'Evidence required', 
 // ------------------------------------------------------------------- KB
 
 async function kbPage(env: Env, flash?: { text: string; error?: boolean }): Promise<Response> {
-  const [types, articles] = await Promise.all([listTypesWithReasons(env.DB), listArticles(env.DB)]);
+  const types = await listTypesWithReasons(env.DB);
   const body = html`
 <h2>Transaction types and reasons</h2>
-<p class="sub">What staff can do over WhatsApp, the reasons allowed for each, and the process for each reason.
-Changes take effect on the next message; nothing needs to be redeployed.</p>
+<p class="sub">The whole knowledge base: what staff can do, the reasons allowed for each, and the process for each.
+The agent answers from these guides only. Changes take effect on the next message; nothing needs to be redeployed.</p>
 ${types.map(
   (t) => html`<div class="card">
   <div class="row"><div class="grow"><h3>${t.name} ${activePill(t.is_active)}</h3>
     <div class="guide">${t.description}</div></div>${rowActions('types', t.id, t.is_active, 'this transaction type and all its reasons')}</div>
+  ${
+    t.is_active
+      ? ''
+      : html`<p class="msg err">This transaction type is off. Staff can't use it, and the agent sees <strong>none</strong> of its reasons,
+  even the ones marked Active. Click Activate above to switch it back on.</p>`
+  }
   ${t.reasons.map(
     (r) => html`<div class="reason"><div class="row"><div class="grow">
-      <strong>${r.label}</strong> ${activePill(r.is_active)}
+      <strong>${r.label}</strong> ${t.is_active || !r.is_active ? activePill(r.is_active) : html`<span class="pill warn">Hidden: type is off</span>`}
       <span class="pill">${EVIDENCE_LABEL[r.evidence_rule]}</span>
       ${r.max_days != null ? html`<span class="pill">Max ${r.max_days} days</span>` : ''}
       <div class="guide">${r.process_guide}</div></div>${rowActions('reasons', r.id, r.is_active, 'this reason')}</div></div>`,
@@ -157,16 +160,7 @@ ${types.map(
   <div class="reason"><a class="btn" href="/admin/kb/reasons/new?type=${t.id}">+ Add a reason</a></div>
 </div>`,
 )}
-<a class="btn" href="/admin/kb/types/new">+ Add a transaction type</a>
-
-<h2>Articles</h2>
-<p class="sub">Reference information the assistant uses to answer general questions: policies, FAQs, contacts.</p>
-${articles.map(
-  (a) => html`<div class="card"><div class="row"><div class="grow"><h3>${a.title} ${activePill(a.is_active)}</h3>
-  ${a.tags ? html`<div class="sub">Tags: ${a.tags}</div>` : ''}<div class="guide">${a.content}</div></div>
-  ${rowActions('articles', a.id, a.is_active, 'this article')}</div></div>`,
-)}
-<a class="btn" href="/admin/kb/articles/new">+ Add an article</a>`;
+<a class="btn" href="/admin/kb/types/new">+ Add a transaction type</a>`;
   return layout('kb', 'Knowledge base', body, flash);
 }
 
@@ -228,21 +222,9 @@ ${GUIDE_HELP}
 </form>`;
 }
 
-function articleForm(action: string, v: { title: string; content: string; tags: string; is_active: boolean }, isNew: boolean): Raw {
-  return html`<h2>${isNew ? 'Add an article' : `Edit: ${v.title}`}</h2>
-<form method="post" action="${action}" class="card">
-  <label for="title">Title</label><input id="title" name="title" type="text" value="${v.title}" required maxlength="120">
-  <label for="content">Content</label>
-  <textarea id="content" name="content" class="tall" placeholder="Plain text. Simple lists with “-” are fine.">${v.content}</textarea>
-  <label for="tags">Tags (optional)</label><input id="tags" name="tags" type="text" value="${v.tags}" placeholder="e.g. leave, policy">
-  ${checkbox('is_active', v.is_active, 'Active (the assistant can use it)')}
-  ${formButtons}
-</form>`;
-}
-
 const field = (form: FormData, name: string): string => String(form.get(name) ?? '').replace(/\r\n/g, '\n').trim();
 
-const KIND_TABLE: Record<string, KbTable> = { types: 'kb_transaction_types', reasons: 'kb_reasons', articles: 'kb_articles' };
+const KIND_TABLE: Record<string, KbTable> = { types: 'kb_transaction_types', reasons: 'kb_reasons' };
 
 async function kbRoutes(request: Request, env: Env, url: URL, parts: string[]): Promise<Response> {
   const [kind, idPart, action] = parts; // /admin/kb/<kind>/<id|new>/<action?>
@@ -327,20 +309,7 @@ async function kbRoutes(request: Request, env: Env, url: URL, parts: string[]): 
     return layout('kb', 'Reason', reasonForm(formAction, type.name, v, isNew));
   }
 
-  // articles
-  const existing = id === null ? null : await getArticle(env.DB, id);
-  if (id !== null && !existing) return notFound();
-  if (isPost) {
-    const form = await request.formData();
-    const data = { title: field(form, 'title'), content: field(form, 'content'), tags: field(form, 'tags'), is_active: form.get('is_active') === '1' };
-    if (!data.title) return layout('kb', 'Article', articleForm(url.pathname, data, isNew), { text: 'Please enter a title.', error: true });
-    await saveArticle(env.DB, id, data);
-    return redirect('/admin/kb?msg=Saved');
-  }
-  const v = existing
-    ? { title: existing.title, content: existing.content, tags: existing.tags, is_active: Boolean(existing.is_active) }
-    : { title: '', content: '', tags: '', is_active: true };
-  return layout('kb', 'Article', articleForm(url.pathname, v, isNew));
+  return notFound();
 }
 
 // ------------------------------------------------------------ technical

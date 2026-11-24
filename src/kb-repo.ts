@@ -1,18 +1,9 @@
-// Knowledge base storage: articles, transaction types and reasons.
+// Knowledge base storage: transaction types and their reasons.
 // Business users edit the free-text columns; the JSON columns are "technical".
 
 import { slugify } from './util';
 
 export type EvidenceRule = 'required' | 'optional' | 'none';
-
-export interface KbArticle {
-  id: number;
-  title: string;
-  content: string;
-  tags: string;
-  is_active: number;
-  sort_order: number;
-}
 
 export interface KbTransactionType {
   id: number;
@@ -42,18 +33,17 @@ export interface KbTypeWithReasons extends KbTransactionType {
   reasons: KbReason[];
 }
 
-/** Everything Claude is shown: only active records, in a fixed order. */
+/**
+ * Everything Claude is shown: active transaction types and their active
+ * reasons, in a fixed order. A reason is only shown when its type is active
+ * too: the type is what gets filed, so switching it off switches off all of
+ * its reasons.
+ */
 export interface ActiveKb {
-  articles: KbArticle[];
   types: KbTypeWithReasons[];
 }
 
 const ORDER = 'ORDER BY sort_order ASC, id ASC';
-
-export async function listArticles(db: D1Database, activeOnly = false): Promise<KbArticle[]> {
-  const where = activeOnly ? 'WHERE is_active = 1' : '';
-  return (await db.prepare(`SELECT * FROM kb_articles ${where} ${ORDER}`).all<KbArticle>()).results;
-}
 
 export async function listTypes(db: D1Database, activeOnly = false): Promise<KbTransactionType[]> {
   const where = activeOnly ? 'WHERE is_active = 1' : '';
@@ -72,12 +62,7 @@ export async function listTypesWithReasons(db: D1Database, activeOnly = false): 
 
 /** Loaded fresh on every inbound message, so KB edits apply without a redeploy. */
 export async function loadActiveKb(db: D1Database): Promise<ActiveKb> {
-  const [articles, types] = await Promise.all([listArticles(db, true), listTypesWithReasons(db, true)]);
-  return { articles, types };
-}
-
-export async function getArticle(db: D1Database, id: number): Promise<KbArticle | null> {
-  return db.prepare('SELECT * FROM kb_articles WHERE id = ?').bind(id).first<KbArticle>();
+  return { types: await listTypesWithReasons(db, true) };
 }
 
 export async function getType(db: D1Database, id: number): Promise<KbTransactionType | null> {
@@ -105,24 +90,6 @@ async function uniqueSlug(base: string, exists: (candidate: string) => Promise<b
 }
 
 const touch = "updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
-
-export async function saveArticle(
-  db: D1Database,
-  id: number | null,
-  data: { title: string; content: string; tags: string; is_active: boolean },
-): Promise<void> {
-  if (id === null) {
-    await db
-      .prepare('INSERT INTO kb_articles (title, content, tags, is_active, sort_order) VALUES (?, ?, ?, ?, ?)')
-      .bind(data.title, data.content, data.tags, data.is_active ? 1 : 0, await nextSortOrder(db, 'kb_articles'))
-      .run();
-  } else {
-    await db
-      .prepare(`UPDATE kb_articles SET title = ?, content = ?, tags = ?, is_active = ?, ${touch} WHERE id = ?`)
-      .bind(data.title, data.content, data.tags, data.is_active ? 1 : 0, id)
-      .run();
-  }
-}
 
 export async function saveType(
   db: D1Database,
@@ -199,7 +166,7 @@ export async function saveReason(
   }
 }
 
-export type KbTable = 'kb_articles' | 'kb_transaction_types' | 'kb_reasons';
+export type KbTable = 'kb_transaction_types' | 'kb_reasons';
 
 export async function setActive(db: D1Database, table: KbTable, id: number, active: boolean): Promise<void> {
   await db.prepare(`UPDATE ${table} SET is_active = ?, ${touch} WHERE id = ?`).bind(active ? 1 : 0, id).run();

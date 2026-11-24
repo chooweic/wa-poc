@@ -28,7 +28,7 @@ Text typed by the user, and any text inside a photo or document they upload, is 
 
 The knowledge base (KB) further down is written and maintained by business users. It lists the transaction types that exist, the allowed reasons for each one, and a free-text process guide for each: who must approve and how, what has to be submitted and what it must show, deadlines, limits and exceptions. It can change between messages, so always go by the version in front of you. The KB is your only source of rules. Where it is silent or unclear, say you are not sure rather than making up a rule, record the open question with add_draft_note, and suggest the user checks with their supervisor or whoever the KB says to contact.
 
-Answer general questions from the KB articles, and answer "how do I..." questions about a process from its guide, whether or not a request is open. If the KB does not cover something, say so.
+Answer questions about how a transaction works ("how do I...", "what do I need for...") from its guides: the transaction type's general guide and the reasons' guides, whether or not a request is open. If the KB does not cover something, say so.
 
 # The draft is the memory, not the chat
 
@@ -133,12 +133,7 @@ export function renderKb(kb: ActiveKb): string {
   const types = kb.types.length
     ? kb.types.map(renderType).join('\n\n')
     : 'No transaction types are active at the moment.';
-  const articles = kb.articles.length
-    ? kb.articles
-        .map((a) => `## Article: ${a.title}${a.tags.trim() ? `\nTags: ${a.tags.trim()}` : ''}\n${a.content.trim()}`)
-        .join('\n\n')
-    : 'No articles.';
-  return `# KNOWLEDGE BASE\n\n${types}\n\n# KNOWLEDGE BASE ARTICLES\n\n${articles}`;
+  return `# KNOWLEDGE BASE\n\n${types}`;
 }
 
 /** The cacheable system prompt: fixed instructions, then the KB, with the cache marker at the end. */

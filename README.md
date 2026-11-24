@@ -183,9 +183,16 @@ Draft statuses: `collecting` → `awaiting_confirmation` → `submitted` | `fail
 
 ### The knowledge base has two layers
 
-- **Business content** (KB tab): articles, transaction types and reasons, all
+- **Business content** (KB tab): transaction types and their reasons, all
   free text, plus two simple controls per reason that the code enforces:
   evidence required / optional / none, and an optional maximum number of days.
+  This is the only knowledge the agent has: it answers questions from the
+  transaction types' general guides and the reasons' guides. Put anything
+  general (policy, who to contact) in a transaction type's general guide.
+- **A reason is only used while its transaction type is active.** The type is
+  what gets filed, so switching a type off switches off all of its reasons,
+  even ones marked Active. The KB tab shows a warning on a type that is off,
+  and marks its reasons "Hidden: type is off".
 - **Technical settings** (Technical tab): JSON Schemas for the data each
   request collects. Seeded for the demo; business users never open it.
 
@@ -740,9 +747,10 @@ Planned, and deliberately not built yet:
    `awaiting_confirmation` for a configurable number of days. Log each
    deletion and never touch evidence linked to submitted or pending-review
    records.
-3. **Load long KB articles only when needed.** Past roughly 20,000 tokens,
-   always send a compact index (types, reasons with their guides and evidence
-   rules) and give Claude a `get_kb_article(id)` tool for full policy text.
+3. **Load long process guides only when needed.** Past roughly 20,000
+   tokens, always send a compact index (types and reasons with a short summary
+   and their evidence rules) and give Claude a tool to fetch a full guide only
+   when a question needs it.
 4. **Measure token usage and cost.** Store the usage fields per message and
    per draft, and show cost per message, per completed transaction and the
    cache hit rate on `/admin`, with a warning when cache reads stay at 0.
