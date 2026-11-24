@@ -19,8 +19,8 @@
     {
       "binding": "DB",
       "database_name": "wa-poc-db",
-      // Replace with the id printed by `npx wrangler d1 create wa-poc-db`.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // The id printed by `npx wrangler d1 create wa-poc-db` (not a secret).
+      "database_id": "fbf14853-473b-46b1-aeb9-9d39b1c7470b",
       "migrations_dir": "migrations"
     }
   ],
