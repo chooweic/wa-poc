@@ -189,7 +189,7 @@ the next message with no redeploy.
 - **Images are sent once.** A photo or PDF goes to Claude only on the turn it
   arrives. Claude records what it shows, and later turns get that text.
 - **Short history.** Only the last 20 messages are sent; the draft is the memory.
-- **Low effort.** `CLAUDE_EFFORT` defaults to `low`.
+- **Modest effort.** `CLAUDE_EFFORT` is `medium` in `wrangler.jsonc` (the code's own default is `low`).
 
 Each Claude call logs its token usage (never message content). If
 `cache_read_input_tokens` stays at 0 across messages a few minutes apart,
@@ -290,8 +290,8 @@ Locally these go in `.dev.vars`. In production set them with
 |---|---|---|
 | `ANTHROPIC_API_KEY` | yes | Claude API key |
 | `ADMIN_PASSWORD` | yes | Login for `/admin`, `/mock-wa`, `/mock-app`, `/evidence` |
-| `CLAUDE_MODEL` | no | Default `claude-opus-5-5` |
-| `CLAUDE_EFFORT` | no | `low` (default) or `medium` |
+| `CLAUDE_MODEL` | no | Set to `claude-haiku-5-5` in `wrangler.jsonc`; the code's default is `claude-opus-5-5` |
+| `CLAUDE_EFFORT` | no | Set to `medium` in `wrangler.jsonc`; `low` or `high` also accepted |
 | `CLAUDE_MAX_TOKENS` | no | Default `4000`. Includes Claude's thinking, so do not set it very low. |
 | `WHATSAPP_ACCESS_TOKEN` | for real WhatsApp | Token used to send messages and download media |
 | `WHATSAPP_PHONE_NUMBER_ID` | for real WhatsApp | The ID of the sending number (not the number itself) |
@@ -460,9 +460,17 @@ screenshot and crop it.
 
 ## Choosing the Claude model
 
-The default is `claude-opus-5-5` at `low` effort. To try a cheaper model, set
-`CLAUDE_MODEL` (in `.dev.vars`, or `npx wrangler secret put CLAUDE_MODEL`) to
-`claude-sonnet-5-5` or `claude-haiku-5-5`. Nothing else needs to change.
+The model and effort are set in `wrangler.jsonc` under `vars`, currently
+`claude-haiku-5-5` at `medium` effort. To change them, edit those two lines
+and run `npm run deploy`. The options are `claude-opus-5-5` (the most capable,
+and the code's default if `CLAUDE_MODEL` is removed), `claude-sonnet-5-5` and
+`claude-haiku-5-5`. Locally, a value in `.dev.vars` overrides the one in
+`wrangler.jsonc`.
+
+Do not also add `CLAUDE_MODEL` or `CLAUDE_EFFORT` as secrets in the Cloudflare
+dashboard: a secret and a variable with the same name conflict, and the deploy
+fails. A plain-text variable added in the dashboard is removed by the next
+`npm run deploy`, so `wrangler.jsonc` is the place to change them.
 
 Before switching for real use, re-run the demo script and look closely at the
 two things that depend most on the model:
@@ -473,7 +481,7 @@ two things that depend most on the model:
 - **Evidence reading.** Does it read names and dates correctly from the
   samples, and catch the unsigned MC and the vague approval?
 
-Raise `CLAUDE_EFFORT` to `medium` if a model is careless at `low`. Cached
+Raise `CLAUDE_EFFORT` to `high` if a model is careless at `medium`. Cached
 prompts are per model, so the first message after a switch pays for a new cache.
 
 ## Logs and tests

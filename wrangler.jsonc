@@ -11,7 +11,10 @@
   // use `.dev.vars` locally and `wrangler secret put` in production.
   "vars": {
     "APP_TIMEZONE": "Asia/Singapore",
-    "TARGET_APP_MODE": "mock"
+    "TARGET_APP_MODE": "mock",
+    // Claude model and effort. Change here and redeploy; .dev.vars overrides them locally.
+    "CLAUDE_MODEL": "claude-haiku-5-5",
+    "CLAUDE_EFFORT": "medium"
   },
 
   // D1 = the SQL database (KB, conversations, drafts, mock HR system).
