@@ -1,0 +1,59 @@
+<!doctype html>
+<!--
+  SYNTHETIC chat screenshot for the demo: a supervisor approving time off.
+  Open in a browser (a narrow window looks most like a phone) and take a
+  screenshot. Change the details with URL parameters, e.g.
+    fake-approval-chat.html?supervisor=Mr%20Goh&date=2026-11-27&kind=off
+  Parameters: supervisor, date (first day), to (last day, optional),
+              kind = off | nopay, asked (date the request was sent), approve=0 (vague reply)
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sample approval chat (synthetic)</title>
+<style>
+  body { margin: 0; background: #cfd6dd; font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #17202b; }
+  .phone { width: 390px; margin: 20px auto; background: #ece5dd; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+  .bar { background: #3b4a5a; color: #fff; padding: 12px 14px; display: flex; gap: 10px; align-items: center; }
+  .av { width: 38px; height: 38px; border-radius: 50%; background: #8fa3b8; display: grid; place-items: center; font-weight: 700; }
+  .bar .n { font-weight: 600; } .bar .s { font-size: 12px; opacity: .8; }
+  .chat { padding: 14px 10px 20px; display: flex; flex-direction: column; gap: 7px; min-height: 420px; }
+  .day { align-self: center; background: #dfe7ee; color: #55606c; font-size: 12px; border-radius: 8px; padding: 3px 10px; margin: 4px 0; }
+  .m { max-width: 82%; padding: 7px 10px 5px; border-radius: 9px; background: #fff; box-shadow: 0 1px 0 rgba(0,0,0,.12); }
+  .m.me { align-self: flex-end; background: #d9f2c7; }
+  .m small { display: block; text-align: right; font-size: 10.5px; color: #7b8794; margin-top: 2px; }
+  .tag { text-align: center; font-size: 11px; color: #7b8794; padding: 0 0 10px; }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="bar"><div class="av" id="av"></div><div><div class="n" id="sup"></div><div class="s">Supervisor · online</div></div></div>
+  <div class="chat">
+    <div class="day" id="day1"></div>
+    <div class="m me"><span id="ask"></span><small>09:12 ✓✓</small></div>
+    <div class="m"><span id="reply"></span><small>09:47</small></div>
+    <div class="m me">Thank you!<small>09:48 ✓✓</small></div>
+  </div>
+  <div class="tag">Synthetic screenshot generated for software testing.</div>
+</div>
+<script>
+  var q = new URLSearchParams(location.search);
+  function iso(d) { return d.toISOString().slice(0, 10); }
+  function nice(s) { var d = new Date(s + 'T00:00:00Z'); return isNaN(d) ? s : d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }); }
+  var sup = q.get('supervisor') || 'Mr Goh Boon Keat';
+  var date = q.get('date') || iso(new Date(Date.now() + 3 * 86400000));
+  var to = q.get('to');
+  var asked = q.get('asked') || iso(new Date(Date.now() - 86400000));
+  var nopay = q.get('kind') === 'nopay';
+  var when = to && to !== date ? 'from ' + nice(date) + ' to ' + nice(to) : 'on ' + nice(date);
+  var what = nopay ? 'no pay leave' : 'an off day';
+  var set = function (id, v) { document.getElementById(id).textContent = v; };
+  set('sup', sup); set('av', sup.replace(/^(Mr|Ms|Mrs|Mdm)\s+/, '').charAt(0)); set('day1', nice(asked));
+  set('ask', 'Hi ' + sup + ', may I take ' + what + ' ' + when + '?');
+  set('reply', q.get('approve') === '0'
+    ? 'Let me check the roster and get back to you.'
+    : 'Hi, approved. You can take ' + what + ' ' + when + '. ' + (nopay ? 'Noted that it is no pay leave.' : 'Enjoy your day off.'));
+</script>
+</body>
+</html>

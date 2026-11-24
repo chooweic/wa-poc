@@ -1,0 +1,78 @@
+<!doctype html>
+<!--
+  SYNTHETIC test document for the demo. Not a real medical certificate.
+  Open in a browser and take a screenshot. Change the details with URL
+  parameters, e.g.
+    fake-mc.html?name=Aisha%20Rahman&from=2026-11-23&to=2026-11-24&days=2
+  Parameters: name, from, to, days, clinic, doctor, mcno, issued, sign=0 (no signature)
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sample MC (synthetic)</title>
+<style>
+  body { margin: 0; background: #cfd6dd; font-family: Georgia, "Times New Roman", serif; color: #1c2430; }
+  .sheet { position: relative; width: 640px; margin: 24px auto; background: #fffdf8; padding: 36px 44px 44px; box-shadow: 0 6px 24px rgba(0,0,0,.25); overflow: hidden; }
+  .watermark { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+  .watermark span { transform: rotate(-28deg); font: 700 46px/1 Arial, sans-serif; letter-spacing: 4px; color: rgba(200, 40, 40, .13); white-space: nowrap; }
+  .head { display: flex; gap: 16px; align-items: center; border-bottom: 3px double #2a5d8f; padding-bottom: 14px; }
+  .logo { width: 58px; height: 58px; border-radius: 50%; background: #2a5d8f; color: #fff; display: grid; place-items: center; font: 700 30px Arial, sans-serif; }
+  .clinic { font: 700 24px Arial, sans-serif; color: #2a5d8f; }
+  .addr { font: 13px Arial, sans-serif; color: #55606c; }
+  h1 { text-align: center; font-size: 22px; letter-spacing: 3px; margin: 26px 0 6px; }
+  .no { text-align: right; font: 14px "Courier New", monospace; }
+  table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 17px; }
+  td { padding: 9px 4px; vertical-align: top; }
+  td:first-child { width: 190px; color: #55606c; font-family: Arial, sans-serif; font-size: 14px; }
+  .val { border-bottom: 1px dotted #7b8794; font-weight: 700; }
+  p.body { font-size: 17px; line-height: 1.6; margin: 22px 0; }
+  .foot { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 40px; }
+  .sig { text-align: center; width: 250px; }
+  .sig .scrawl { font: italic 34px "Brush Script MT", "Segoe Script", cursive; color: #1b3a8a; height: 46px; transform: rotate(-4deg); }
+  .sig .line { border-top: 1px solid #1c2430; padding-top: 4px; font: 13px Arial, sans-serif; }
+  .stamp { border: 3px solid #b3261e; color: #b3261e; border-radius: 8px; padding: 6px 12px; font: 700 13px Arial, sans-serif; transform: rotate(-7deg); text-align: center; opacity: .8; }
+  .tiny { margin-top: 26px; font: 11px Arial, sans-serif; color: #7b8794; text-align: center; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="watermark"><span>SAMPLE · NOT A REAL MC</span></div>
+  <div class="head">
+    <div class="logo">+</div>
+    <div>
+      <div class="clinic" id="clinic"></div>
+      <div class="addr">Blk 123 Example Avenue 4, #01-45, Singapore 560123 · Tel 6000 0000</div>
+    </div>
+  </div>
+  <div class="no">MC No: <span id="mcno"></span></div>
+  <h1>MEDICAL CERTIFICATE</h1>
+  <table>
+    <tr><td>Name of patient</td><td class="val" id="name"></td></tr>
+    <tr><td>Date of consultation</td><td class="val" id="issued"></td></tr>
+  </table>
+  <p class="body">This is to certify that the above-named patient was examined and is unfit for duty for
+    <strong id="days"></strong> day(s), from <strong id="from"></strong> to <strong id="to"></strong> inclusive.</p>
+  <div class="foot">
+    <div class="stamp" id="stamp"></div>
+    <div class="sig"><div class="scrawl" id="scrawl"></div><div class="line" id="doctor"></div></div>
+  </div>
+  <div class="tiny">Synthetic document generated for software testing. Not valid for any real purpose.</div>
+</div>
+<script>
+  var q = new URLSearchParams(location.search);
+  function iso(d) { return d.toISOString().slice(0, 10); }
+  function nice(s) { var d = new Date(s + 'T00:00:00Z'); return isNaN(d) ? s : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }); }
+  var yesterday = iso(new Date(Date.now() - 86400000));
+  var from = q.get('from') || yesterday, to = q.get('to') || from;
+  var days = q.get('days') || String(Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1);
+  var doctor = q.get('doctor') || 'Dr Lim Mei Hua';
+  var clinic = q.get('clinic') || 'Sunrise Family Clinic';
+  var set = function (id, v) { document.getElementById(id).textContent = v; };
+  set('clinic', clinic); set('mcno', q.get('mcno') || 'SFC-204471'); set('name', q.get('name') || 'Aisha Rahman');
+  set('issued', nice(q.get('issued') || from)); set('days', days); set('from', nice(from)); set('to', nice(to));
+  set('doctor', doctor + ' (MCR 00000X)'); set('stamp', clinic.toUpperCase());
+  set('scrawl', q.get('sign') === '0' ? '' : doctor.replace(/^Dr\s+/, '').split(' ').map(function (w) { return w[0]; }).join('. ') + ' ~');
+</script>
+</body>
+</html>

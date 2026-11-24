@@ -163,7 +163,7 @@ ${articles.map(
   return layout('kb', 'Knowledge base', body, flash);
 }
 
-const GUIDE_HELP = html`<div class="help"><strong>Writing a good process guide</strong>
+const GUIDE_HELP = html`<div class="help"><div><strong>Writing a good process guide</strong></div>
 Write it the way you would explain it to a new colleague. The assistant follows it closely, so say:
 <ul>
   <li><strong>Who approves, and how.</strong> “Ask your direct supervisor on WhatsApp” is better than “get approval”.</li>
