@@ -87,5 +87,8 @@ export async function handleTwilioWebhook(request: Request, env: Env): Promise<R
   const inbound = parseTwilioMessage(fields);
   // De-duplication and the allowlist are handled inside ingestInbound.
   if (inbound) await ingestInbound(env, inbound, new URL(request.url).origin);
-  return new Response(EMPTY_TWIML, { status: 200, headers: { 'content-type': 'text/xml; charset=utf-8' } });
+  // TEMPORARY EXPERIMENT: does a TwiML reply get through on a Twilio trial account?
+  const probe =
+    '<?xml version="1.0" encoding="UTF-8"?><Response><Message>Got your message, working on it (TwiML test reply).</Message></Response>';
+  return new Response(inbound ? probe : EMPTY_TWIML, { status: 200, headers: { 'content-type': 'text/xml; charset=utf-8' } });
 }
