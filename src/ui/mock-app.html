@@ -59,9 +59,9 @@
   <nav><a href="/mock-wa" target="mockwa">Mock WhatsApp ↗</a><a href="/admin">Admin</a></nav>
 </header>
 <main>
-  <section><h2>Users and balances <small>keyed by phone number</small></h2><div class="scroll" id="users"></div></section>
+  <section><h2>Users <small>keyed by phone number; leave balances are kept by the HR system, not here</small></h2><div class="scroll" id="users"></div></section>
   <section><h2>Leave records <small>created by API calls</small></h2><div class="scroll" id="records"></div></section>
-  <section><h2>API call log <small>POST /mock-api/transactions, newest first</small></h2><div id="log"></div></section>
+  <section><h2>API call log <small>calls received, and simulated calls to the HR system; newest first</small></h2><div id="log"></div></section>
 </main>
 <script>
 (function () {
@@ -80,12 +80,9 @@
   }
   function renderUsers(users) {
     if (!users.length) return '<div class="none">No users. Add test users on Admin → Test users.</div>';
-    return '<table><thead><tr><th>Phone number</th><th>Name</th><th>Medical leave left</th><th>Off days left</th><th>Unpaid days taken</th></tr></thead><tbody>' +
+    return '<table><thead><tr><th>Phone number</th><th>Name</th></tr></thead><tbody>' +
       users.map(function (u) {
-        var sig = [u.sick_leave_balance, u.off_day_balance, u.unpaid_days_taken].join('|');
-        return '<tr' + flash('users', u.phone_number, sig) + '><td><code>' + esc(u.phone_number) + '</code></td><td>' + esc(u.name) +
-          '</td><td class="num">' + esc(u.sick_leave_balance) + '</td><td class="num">' + esc(u.off_day_balance) +
-          '</td><td class="num">' + esc(u.unpaid_days_taken) + '</td></tr>';
+        return '<tr' + flash('users', u.phone_number, u.name) + '><td><code>' + esc(u.phone_number) + '</code></td><td>' + esc(u.name) + '</td></tr>';
       }).join('') + '</tbody></table>';
   }
   function renderRecords(records) {

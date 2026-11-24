@@ -2,6 +2,10 @@
 // `POST /mock-api/transactions`, used for every transaction type and reason.
 // It stands in for the real system, which is out of scope for the prototype.
 // Every call (accepted or rejected) is written to `mock_api_log`.
+//
+// It does NOT keep leave balances: those belong to the HR system, which is
+// out of scope. When a transaction would change a leave quota, the mock
+// target app logs a SIMULATED call to the HR system (nothing is sent).
 
 export interface MockApiResult {
   status: number;
@@ -9,32 +13,33 @@ export interface MockApiResult {
 }
 
 /**
- * What the mock target app does for each reason code it knows about.
- * A reason code that is NOT in this map (for example one a business user
- * just added in the KB) is still accepted and recorded as `pending_review`,
- * so new reasons work end to end without touching this code.
+ * What the mock target app does for each reason code it knows about: the
+ * status it records, and which leave quota (if any) the HR system would be
+ * asked to adjust. A reason code that is NOT in this map (for example one a
+ * business user just added in the KB) is still accepted and recorded as
+ * `pending_review`, so new reasons work end to end without touching this code.
  */
-const REASON_BEHAVIOUR: Record<
-  string,
-  { deductFrom?: 'sick_leave_balance' | 'off_day_balance'; addTo?: 'unpaid_days_taken'; status: string }
-> = {
-  medical: { deductFrom: 'sick_leave_balance', status: 'approved' },
-  supervisor_granted_off: { deductFrom: 'off_day_balance', status: 'approved' },
-  no_pay_leave: { addTo: 'unpaid_days_taken', status: 'approved' },
+const REASON_BEHAVIOUR: Record<string, { status: string; hrQuota?: string }> = {
+  medical: { status: 'approved', hrQuota: 'medical_leave' },
+  supervisor_granted_off: { status: 'approved', hrQuota: 'off_day' },
+  no_pay_leave: { status: 'approved', hrQuota: 'no_pay_leave' },
   others: { status: 'pending_review' },
 };
 
-const BALANCE_NAMES: Record<string, string> = {
-  sick_leave_balance: 'medical leave',
-  off_day_balance: 'off-day',
-};
+/** Where the HR system's quota API would be. Shown in the log only; nothing is sent. */
+export const SIMULATED_HR_QUOTA_PATH = 'hr-system /leave-quota/adjustments (simulated)';
+
+/** A downstream call to log after the main one. */
+interface SimulatedCall {
+  path: string;
+  request: Record<string, unknown>;
+  response: Record<string, unknown>;
+  status: number;
+}
 
 interface MockUser {
   phone_number: string;
   name: string;
-  sick_leave_balance: number;
-  off_day_balance: number;
-  unpaid_days_taken: number;
 }
 
 function reject(status: number, code: string, message: string, extra: Record<string, unknown> = {}): MockApiResult {
@@ -43,7 +48,7 @@ function reject(status: number, code: string, message: string, extra: Record<str
 
 const isDate = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
-async function process(db: D1Database, payload: any): Promise<MockApiResult> {
+async function process(db: D1Database, payload: any, followUps: SimulatedCall[]): Promise<MockApiResult> {
   // 1. Shape of the generic payload.
   if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
     return reject(400, 'invalid_request', 'The request body must be a JSON object.');
@@ -88,15 +93,8 @@ async function process(db: D1Database, payload: any): Promise<MockApiResult> {
 
   // 5. Behaviour depends on the parameters.
   const behaviour = REASON_BEHAVIOUR[payload.reason_code] ?? { status: 'pending_review' };
-  if (behaviour.deductFrom && user[behaviour.deductFrom] < days) {
-    return reject(
-      422,
-      'insufficient_balance',
-      `Not enough ${BALANCE_NAMES[behaviour.deductFrom]} balance: ${user[behaviour.deductFrom]} day(s) left, ${days} requested.`,
-    );
-  }
 
-  // 6. Write the record and update balances together.
+  // 6. Write the record.
   const details = JSON.stringify({
     fields: otherFields,
     evidence: Array.isArray(payload.evidence) ? payload.evidence : [],
@@ -128,30 +126,32 @@ async function process(db: D1Database, payload: any): Promise<MockApiResult> {
       .prepare(`UPDATE mock_leave_records SET reference_no = 'TX-' || printf('%06d', id) WHERE client_reference = ?`)
       .bind(payload.reference),
   ];
-  if (behaviour.deductFrom) {
-    statements.push(
-      db
-        .prepare(`UPDATE mock_users SET ${behaviour.deductFrom} = ${behaviour.deductFrom} - ? WHERE phone_number = ?`)
-        .bind(days, user.phone_number),
-    );
-  }
-  if (behaviour.addTo) {
-    statements.push(
-      db
-        .prepare(`UPDATE mock_users SET ${behaviour.addTo} = ${behaviour.addTo} + ? WHERE phone_number = ?`)
-        .bind(days, user.phone_number),
-    );
-  }
   await db.batch(statements);
 
   const record = await db
     .prepare('SELECT reference_no, status FROM mock_leave_records WHERE client_reference = ?')
     .bind(payload.reference)
     .first<{ reference_no: string; status: string }>();
-  const after = await db
-    .prepare('SELECT sick_leave_balance, off_day_balance, unpaid_days_taken FROM mock_users WHERE phone_number = ?')
-    .bind(user.phone_number)
-    .first();
+
+  // 7. Leave quotas live in the HR system (out of scope). An approved record
+  //    that affects a quota would be passed on there; the call is simulated.
+  let hrQuota: Record<string, unknown> | null = null;
+  if (behaviour.hrQuota && behaviour.status === 'approved') {
+    followUps.push({
+      path: SIMULATED_HR_QUOTA_PATH,
+      request: {
+        phone_number: user.phone_number,
+        quota: behaviour.hrQuota,
+        days,
+        start_date,
+        end_date,
+        source_reference: record?.reference_no,
+      },
+      response: { simulated: true, note: 'Not sent anywhere: the HR system is out of scope for this prototype.' },
+      status: 200,
+    });
+    hrQuota = { simulated: true, quota: behaviour.hrQuota, days };
+  }
 
   return {
     status: 201,
@@ -161,7 +161,7 @@ async function process(db: D1Database, payload: any): Promise<MockApiResult> {
       transaction_type: payload.transaction_type,
       reason_code: payload.reason_code,
       days,
-      balances: after,
+      hr_quota_adjustment: hrQuota,
     },
   };
 }
@@ -173,19 +173,21 @@ export async function handleMockTransaction(
   idempotencyKey: string | null,
 ): Promise<MockApiResult> {
   let result: MockApiResult;
+  const followUps: SimulatedCall[] = [];
   try {
-    result = await process(db, payload);
+    result = await process(db, payload, followUps);
   } catch (e) {
     console.error('mock api error:', (e as Error).message);
     result = reject(500, 'internal_error', 'The system had an internal error.');
+    followUps.length = 0;
   }
-  await db
-    .prepare(
-      `INSERT INTO mock_api_log (method, path, idempotency_key, request_json, response_json, status)
-       VALUES ('POST', '/mock-api/transactions', ?, ?, ?, ?)`,
-    )
-    .bind(idempotencyKey, JSON.stringify(payload ?? null), JSON.stringify(result.body), result.status)
-    .run();
+  const log =
+    "INSERT INTO mock_api_log (method, path, idempotency_key, request_json, response_json, status) VALUES ('POST', ?, ?, ?, ?, ?)";
+  // The incoming call first, then anything it would have triggered downstream.
+  await db.batch([
+    db.prepare(log).bind('/mock-api/transactions', idempotencyKey, JSON.stringify(payload ?? null), JSON.stringify(result.body), result.status),
+    ...followUps.map((f) => db.prepare(log).bind(f.path, idempotencyKey, JSON.stringify(f.request), JSON.stringify(f.response), f.status)),
+  ]);
   return result;
 }
 

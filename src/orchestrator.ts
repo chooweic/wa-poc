@@ -131,7 +131,7 @@ async function submitDraft(deps: OrchestratorDeps, draft: Draft, baseUrl: string
     // Stay in awaiting_confirmation: another YES retries with the same reference.
     draft.error = result.errorMessage ?? 'The target system could not be reached.';
   } else if (result.status === 422) {
-    // The target app refused the content (dates, balance...). Reopen so the user can amend it.
+    // The target app refused the content (for example the dates). Reopen so the user can amend it.
     draft.status = 'collecting';
     draft.error = result.errorMessage ?? 'The target system rejected the request.';
   } else {

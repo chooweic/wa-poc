@@ -73,8 +73,6 @@ export function buildSubmissionMessage(result: SubmitResult): string {
       return `This request was already submitted${result.reference ? `. Your reference number is *${result.reference}*` : ''}.`;
     case 'user_not_found':
       return "I couldn't submit this: your phone number isn't registered in the system. Please ask your administrator to add it, then start a new request.";
-    case 'insufficient_balance':
-      return `I couldn't submit this. ${result.errorMessage} Tell me if you'd like to change the request, or speak to your supervisor.`;
     case 'invalid_dates':
     case 'invalid_days':
       return `I couldn't submit this because the system didn't accept the dates or number of days (${result.errorMessage}). Let's correct them and try again.`;

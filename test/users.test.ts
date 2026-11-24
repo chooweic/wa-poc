@@ -18,30 +18,26 @@ async function post(path: string, fields: Record<string, string>) {
   return handleAdmin(new Request(url, { method: 'POST', body }), env, url);
 }
 const user = (phone: string) => env.DB.prepare('SELECT * FROM mock_users WHERE phone_number = ?').bind(phone).first<any>();
+const users = async () => (await env.DB.prepare('SELECT * FROM mock_users').all<any>()).results;
 
 describe('adding and editing test users', () => {
   test('a new user is added with the number normalised to digits', async () => {
-    const res = await post('/admin/users/save', { phone: '+65 9123 4567', name: 'Siti', sick: '10', off: '2.5', unpaid: '' });
+    const res = await post('/admin/users/save', { phone: '+65 9123 4567', name: 'Siti' });
     expect(res.status).toBe(303);
-    expect(await user('6591234567')).toEqual({
-      phone_number: '6591234567', name: 'Siti', sick_leave_balance: 10, off_day_balance: 2.5, unpaid_days_taken: 0,
-    });
+    expect(await user('6591234567')).toEqual({ phone_number: '6591234567', name: 'Siti' });
   });
 
-  test('saving an existing number updates that user', async () => {
-    await post('/admin/users/save', { phone: '6590000001', name: 'Aisha R.', sick: '3', off: '1', unpaid: '2' });
-    expect(await user('6590000001')).toMatchObject({ name: 'Aisha R.', sick_leave_balance: 3, off_day_balance: 1, unpaid_days_taken: 2 });
+  test('saving an existing number renames that user', async () => {
+    await post('/admin/users/save', { phone: '6590000001', name: 'Aisha R.' });
+    expect(await user('6590000001')).toEqual({ phone_number: '6590000001', name: 'Aisha R.' });
     expect(await listMockUsers(env.DB)).toHaveLength(3);
   });
 
   test('bad input is refused with a message and nothing is saved', async () => {
-    const res = await post('/admin/users/save', { phone: '12', name: 'Too short', sick: '1', off: '1', unpaid: '0' });
+    const res = await post('/admin/users/save', { phone: '12', name: 'Too short' });
     expect(res.status).toBe(200);
     expect(await res.text()).toMatch(/Not saved\. Enter the phone number in international format/);
-    expect(parseUserInput({ phone: '6591234567', name: ' ', sick: '1', off: '1', unpaid: '0' })).toEqual({ error: 'Please enter a name.' });
-    expect(parseUserInput({ phone: '6591234567', name: 'X', sick: '-1', off: '1', unpaid: '0' })).toEqual({
-      error: 'Medical leave left must be a number from 0 to 999.',
-    });
+    expect(parseUserInput({ phone: '6591234567', name: ' ' })).toEqual({ error: 'Please enter a name.' });
     expect(await listMockUsers(env.DB)).toHaveLength(3);
   });
 
@@ -61,16 +57,15 @@ describe('adding and editing test users', () => {
 
 describe('reset demo data', () => {
   test('keeps added users, restores the demo users and clears records and the API log', async () => {
-    await post('/admin/users/save', { phone: '6598887777', name: 'Added later', sick: '5', off: '5', unpaid: '0' });
-    await env.DB.prepare(`UPDATE mock_users SET sick_leave_balance = 0, unpaid_days_taken = 4 WHERE phone_number = '6590000001'`).run();
+    await post('/admin/users/save', { phone: '6598887777', name: 'Added later' });
     await env.DB.prepare(`DELETE FROM mock_users WHERE phone_number = '6590000002'`).run();
     await env.DB.prepare(`INSERT INTO mock_api_log (method, path, request_json, response_json, status) VALUES ('POST', '/x', '{}', '{}', 201)`).run();
 
     await post('/admin/demo/reset-demo', {});
 
-    expect(await user('6598887777')).toMatchObject({ name: 'Added later', sick_leave_balance: 5 });
-    expect(await user('6590000001')).toMatchObject({ sick_leave_balance: 14, unpaid_days_taken: 0 });
-    expect(await user('6590000002')).toMatchObject({ name: 'Tan Wei Ming' });
+    expect(await user('6598887777')).toEqual({ phone_number: '6598887777', name: 'Added later' });
+    expect(await user('6590000002')).toEqual({ phone_number: '6590000002', name: 'Tan Wei Ming' });
+    expect(await users()).toHaveLength(4);
     expect((await env.DB.prepare('SELECT COUNT(*) AS n FROM mock_api_log').first<any>()).n).toBe(0);
   });
 });

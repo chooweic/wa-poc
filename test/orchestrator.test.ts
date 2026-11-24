@@ -20,7 +20,8 @@ beforeEach(async () => {
 });
 
 const records = async () => (await env.DB.prepare('SELECT * FROM mock_leave_records').all<any>()).results;
-const apiCalls = async () => (await env.DB.prepare('SELECT COUNT(*) AS n FROM mock_api_log').first<{ n: number }>())!.n;
+const apiCalls = async () =>
+  (await env.DB.prepare(`SELECT COUNT(*) AS n FROM mock_api_log WHERE path = '/mock-api/transactions'`).first<{ n: number }>())!.n;
 const openDraft = async () =>
   env.DB.prepare(`SELECT * FROM drafts WHERE status IN ('collecting', 'awaiting_confirmation')`).first<any>();
 const lastDraft = async () => env.DB.prepare('SELECT * FROM drafts ORDER BY updated_at DESC, rowid DESC').first<any>();
@@ -101,8 +102,9 @@ describe('confirmation gating: no submission without the user saying YES', () =>
 
     const [record] = await records();
     expect(record).toMatchObject({ phone_number: PHONE, reason_code: 'medical', status: 'approved', days: 1, start_date: '2026-11-23' });
-    const user = await env.DB.prepare('SELECT sick_leave_balance FROM mock_users WHERE phone_number = ?').bind(PHONE).first<any>();
-    expect(user.sick_leave_balance).toBe(13);
+    // No balances are kept here; the HR system's quota update is only simulated and logged.
+    const log = (await env.DB.prepare('SELECT path FROM mock_api_log ORDER BY id').all<any>()).results.map((r) => r.path);
+    expect(log).toEqual(['/mock-api/transactions', 'hr-system /leave-quota/adjustments (simulated)']);
     expect(await lastDraft()).toMatchObject({ status: 'submitted', target_reference: 'TX-000001' });
     expect(await openDraft()).toBeNull();
   });
@@ -170,11 +172,14 @@ describe('submission results', () => {
     expect((await lastDraft()).status).toBe('failed');
   });
 
-  test('not enough balance reopens the draft so the user can change it', async () => {
-    await env.DB.prepare('UPDATE mock_users SET sick_leave_balance = 0 WHERE phone_number = ?').bind(PHONE).run();
+  test('content the target app refuses (422) reopens the draft so the user can change it', async () => {
     await reachConfirmation();
-    const replies = await sendViaSimulator(env, createDeps(env, new ScriptedClaude([])), PHONE, 'yes');
-    expect(replies[0]).toMatch(/Not enough medical leave balance/);
+    const deps = createDeps(env, new ScriptedClaude([]));
+    deps.target = {
+      submit: async () => ({ ok: false, status: 422, errorCode: 'invalid_dates', errorMessage: 'end_date is before start_date.', retryable: false }),
+    };
+    const replies = await sendViaSimulator(env, deps, PHONE, 'yes');
+    expect(replies[0]).toMatch(/didn't accept the dates or number of days/);
     expect((await openDraft()).status).toBe('collecting');
   });
 

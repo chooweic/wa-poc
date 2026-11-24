@@ -548,7 +548,7 @@ async function demoRoutes(request: Request, env: Env, url: URL, parts: string[])
   }
   const body = html`<h2>Demo data</h2>
 <div class="card"><h3>Reset demo data</h3>
-  <p class="sub">Deletes the mock target app’s records and API log, and puts the built-in demo users back to their starting balances.
+  <p class="sub">Deletes the mock target app’s records and API log, and makes sure the three built-in demo users exist.
   Test users you added on the <a href="/admin/users">Test users</a> tab are kept. The knowledge base and chats are not touched.</p>
   <form method="post" action="/admin/demo/reset-demo" onsubmit="return confirm('Reset the mock target app data?')"><button class="primary">Reset demo data</button></form>
 </div>
@@ -563,20 +563,16 @@ async function demoRoutes(request: Request, env: Env, url: URL, parts: string[])
 // ------------------------------------------------------------ test users
 
 function userInputFrom(form: FormData): UserInput {
-  return { phone: field(form, 'phone'), name: field(form, 'name'), sick: field(form, 'sick'), off: field(form, 'off'), unpaid: field(form, 'unpaid') };
+  return { phone: field(form, 'phone'), name: field(form, 'name') };
 }
 
 async function usersPage(env: Env, flash?: { text: string; error?: boolean }, typed?: UserInput): Promise<Response> {
   const users = await listMockUsers(env.DB);
-  const v = typed ?? { phone: '', name: '', sick: '14', off: '6', unpaid: '0' };
-  // Inputs in a table row sit outside that row's <form>; the form="..." attribute still posts them with it.
-  const num = (name: string, value: unknown, label: string, formId?: string) =>
-    html`<input name="${name}" type="number" min="0" max="999" step="0.5" value="${value}" aria-label="${label}" style="width:6.5em"${
-      formId ? html` form="${formId}"` : html` id="${name}"`
-    }>`;
+  const v = typed ?? { phone: '', name: '' };
   const body = html`<h2>Test users</h2>
 <p class="sub">People the mock target app knows, identified by their WhatsApp number. A request from a number that is not listed here is
-rejected when it is submitted. New users appear in the Mock WhatsApp “You are” list after the page is reloaded.</p>
+rejected when it is submitted. New users appear in the Mock WhatsApp “You are” list after the page is reloaded.
+Leave balances are not kept here: they belong to the HR system, which is outside this prototype.</p>
 <div class="help">To use a test user on a <strong>real phone</strong>, the number must also be in the <code>ALLOWED_WHATSAPP_NUMBERS</code> setting
 and added as a test recipient in Meta. On Mock WhatsApp any number listed here works straight away.</div>
 <form method="post" action="/admin/users/save" class="card">
@@ -586,27 +582,23 @@ and added as a test recipient in Meta. On Mock WhatsApp any number listed here w
       <input id="phone" name="phone" type="text" inputmode="numeric" value="${v.phone}" placeholder="6591234567" required></div>
     <div class="grow"><label for="name">Name</label><input id="name" name="name" type="text" value="${v.name}" required maxlength="80"></div>
   </div>
-  <div class="row" style="align-items:flex-end">
-    <div><label for="sick">Medical leave left</label>${num('sick', v.sick, 'Medical leave left')}</div>
-    <div><label for="off">Off days left</label>${num('off', v.off, 'Off days left')}</div>
-    <div><label for="unpaid">Unpaid days taken</label>${num('unpaid', v.unpaid, 'Unpaid days taken')}</div>
-  </div>
-  <p class="hint">International format, digits only, no “+”. Saving a number that already exists updates that user.</p>
+  <p class="hint">International format, digits only, no “+”. Saving a number that already exists renames that user.</p>
   <p><button class="primary">Add user</button></p>
 </form>
-<div class="card scroll">${
+<div class="card">${
     users.length
-      ? html`<table><thead><tr><th>WhatsApp number</th><th>Name</th><th>Medical leave left</th><th>Off days left</th><th>Unpaid days taken</th><th></th></tr></thead><tbody>
+      ? html`<h3>Users (${users.length})</h3>
 ${users.map(
-  (u) => html`<tr><td><code>${u.phone_number}</code></td>
-<td><form id="u${u.phone_number}" method="post" action="/admin/users/save"><input type="hidden" name="phone" value="${u.phone_number}">
-<input name="name" type="text" value="${u.name}" required maxlength="80" aria-label="Name" style="min-width:10em"></form></td>
-<td>${num('sick', u.sick_leave_balance, 'Medical leave left', `u${u.phone_number}`)}</td><td>${num('off', u.off_day_balance, 'Off days left', `u${u.phone_number}`)}</td>
-<td>${num('unpaid', u.unpaid_days_taken, 'Unpaid days taken', `u${u.phone_number}`)}</td>
-<td><div class="actions"><button form="u${u.phone_number}">Save</button>
+  (u) => html`<div class="reason"><div class="row">
+<code>${u.phone_number}</code>
+<form class="row grow" method="post" action="/admin/users/save" style="flex-wrap:nowrap">
+<input type="hidden" name="phone" value="${u.phone_number}">
+<input name="name" type="text" value="${u.name}" required maxlength="80" aria-label="Name for ${u.phone_number}" style="min-width:0">
+<button>Save</button></form>
 <form method="post" action="/admin/users/delete" onsubmit="return confirm('Remove ${u.name}? Their past records are kept.')">
-<input type="hidden" name="phone" value="${u.phone_number}"><button class="danger">Remove</button></form></div></td></tr>`,
-)}</tbody></table>`
+<input type="hidden" name="phone" value="${u.phone_number}"><button class="danger">Remove</button></form>
+</div></div>`,
+)}`
       : html`<p class="sub">No users yet.</p>`
   }</div>`;
   return layout('users', 'Test users', body, flash);

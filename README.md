@@ -11,8 +11,8 @@ transactions on another application, for example applying for leave.
 - Nothing is submitted until the backend shows a summary and the user
   replies **YES**. That check is in code, not left to the model.
 - Every request is sent to the target application through **one fixed API
-  call**. A mock target app is built in so you can watch records and balances
-  change live.
+  call**. A mock target app is built in so you can watch records and the API
+  log change live.
 
 Everything runs on Cloudflare's free tier, and there is a browser chat page,
 **Mock WhatsApp**, so you can try the whole thing without a phone or a Meta account.
@@ -41,7 +41,7 @@ All of them ask for a login: any username, and the `ADMIN_PASSWORD` you set.
 | Page | What it is |
 |---|---|
 | `/mock-wa` | **Mock WhatsApp**: a phone-style chat with the Attendance Business Agent. Pick who you are, send text, photos and PDFs. |
-| `/mock-app` | **Mock target app**: user balances, leave records and the API call log, refreshing every 3 seconds. |
+| `/mock-app` | **Mock target app**: users, leave records and the API call log, refreshing every 3 seconds. |
 | `/admin` | Knowledge base (for business users), Technical settings, Drafts, Conversations, Test users and Demo reset buttons. |
 | `/evidence/<id>` | An uploaded file. Only reachable with the admin login. |
 
@@ -57,7 +57,7 @@ stand-in used to check the wiring, not from the real Claude model.
 |---|---|
 | Confirmation summary sent by the backend | [1-chat-confirmation-summary.png](docs/screenshots/1-chat-confirmation-summary.png) |
 | After replying YES | [2-chat-submitted.png](docs/screenshots/2-chat-submitted.png) |
-| Mock target app: balances, record, API log | [3-mock-target-app.png](docs/screenshots/3-mock-target-app.png) |
+| Mock target app: users, record, API log | [3-mock-target-app.png](docs/screenshots/3-mock-target-app.png) |
 | Admin: knowledge base | [4-admin-knowledge-base.png](docs/screenshots/4-admin-knowledge-base.png) |
 | Admin: a draft with fields, checklist and evidence | [5-admin-draft.png](docs/screenshots/5-admin-draft.png) |
 | Admin: test users, on a phone | [6-admin-test-users-phone.png](docs/screenshots/6-admin-test-users-phone.png) |
@@ -375,12 +375,14 @@ To add one, open **`/admin` → Test users** (it works on a phone too):
 
 1. Enter the **WhatsApp number** in international format, digits only, for
    example `6591234567` (spaces and a leading `+` are removed for you).
-2. Enter a **name** and the starting balances: medical leave left, off days
-   left and unpaid days taken. Half days are allowed.
+2. Enter a **name**.
 3. Click **Add user**.
 
-In the list below the form you can change a user's name or balances and click
-**Save**, or **Remove** them. Saving a number that already exists updates it.
+In the list below the form you can change a user's name and click **Save**, or
+**Remove** them. Saving a number that already exists renames it.
+
+There are no leave balances to set: they belong to the HR system, which is
+outside this prototype (see [Leave balances](#leave-balances)).
 
 - **On Mock WhatsApp** the new user appears in the "You are" list once you
   reload the page. You can also pick "Other number…" to chat as any number,
@@ -391,8 +393,18 @@ In the list below the form you can change a user's name or balances and click
 
 Three demo users are built in: Aisha Rahman (`6590000001`), Tan Wei Ming
 (`6590000002`) and Priya Nair (`6590000003`). **Admin → Demo → Reset demo
-data** deletes the mock target app's records and API log and puts these three
-back to their starting balances. Users you added are kept.
+data** deletes the mock target app's records and API log and makes sure these
+three exist. Users you added are kept.
+
+### Leave balances
+
+This app does not keep leave balances or quotas, and it does not refuse a
+request for lack of balance: that is the HR system's job, and the HR system is
+out of scope. Where an approved transaction would change a quota (medical
+leave, an off day, no pay leave), the mock target app instead logs a
+**simulated** call, `POST hr-system /leave-quota/adjustments (simulated)`,
+showing what it would send. Nothing is sent anywhere. Requests filed under
+"Others" or a new reason are `pending_review` and trigger no quota call.
 
 ## Demo script
 
@@ -406,8 +418,9 @@ are in `samples/`; see the next section about their dates.
 2. Attach `samples/sample-mc.png` and send it.
 3. Answer the questions (did you tell your supervisor on the day, and so on).
 4. A summary arrives with the details, the checklist and the evidence. Reply `YES`.
-5. Watch `/mock-app`: a record appears as `approved`, Aisha's medical leave
-   drops by one day, and the API log shows the full request and response.
+5. Watch `/mock-app`: a record appears as `approved`, and the API log shows
+   the full request and response, followed by the simulated HR quota call
+   for 1 day of medical leave.
 
 Try `samples/sample-mc-unsigned.png` to see Claude point out the missing signature.
 
@@ -417,7 +430,7 @@ Try `samples/sample-mc-unsigned.png` to see Claude point out the missing signatu
 2. Send `samples/sample-approval-off.png`. Claude checks the screenshot shows
    the supervisor's name, the date and a clear approval, and that the date
    matches.
-3. Reply `YES`. The off-day balance drops.
+3. Reply `YES`. The log shows a simulated HR quota call for an off day.
 
 **3. A reason that fits none of the specific ones**
 
@@ -425,7 +438,7 @@ Try `samples/sample-mc-unsigned.png` to see Claude point out the missing signatu
 2. Claude lists the allowed reasons and asks whether one applies. Say none does.
 3. Claude offers "Others" and confirms your reason in your own words. You may
    send any supporting document; it is stored and described, not judged.
-4. Reply `YES`. The record shows as `pending_review` and no balance changes.
+4. Reply `YES`. The record shows as `pending_review`, with no HR quota call.
 
 **4. A reason added mid-demo**
 
@@ -458,8 +471,8 @@ Try `samples/sample-mc-unsigned.png` to see Claude point out the missing signatu
 
 Other things worth showing: `/cancel` and `/reset` buttons; an unknown number
 (choose "Other number…" on `/mock-wa`), which the mock target app rejects at
-submission with a plain-language message; **Priya Nair** (`6590000003`), who
-has 1 day of medical leave left, asking for 2.
+submission with a plain-language message; a medical leave request for more
+than 14 days, which the code refuses because of the reason's maximum days.
 
 ## Synthetic test images
 
