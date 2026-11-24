@@ -1,0 +1,45 @@
+{
+  // Cloudflare Worker configuration. See README.md "Cloudflare setup".
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wa-poc",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  // Non-secret settings. Secrets (API keys, passwords) are NOT stored here:
+  // use `.dev.vars` locally and `wrangler secret put` in production.
+  "vars": {
+    "APP_TIMEZONE": "Asia/Singapore",
+    "TARGET_APP_MODE": "mock"
+  },
+
+  // D1 = the SQL database (KB, conversations, drafts, mock HR system).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "wa-poc-db",
+      // Replace with the id printed by `npx wrangler d1 create wa-poc-db`.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // R2 = file storage for uploaded evidence (photos / PDFs).
+  "r2_buckets": [{ "binding": "EVIDENCE", "bucket_name": "wa-poc-evidence" }],
+
+  // Queue = background processing. The webhook puts each message here and
+  // returns immediately; the consumer (same Worker) runs the Claude turn.
+  "queues": {
+    "producers": [{ "binding": "INBOUND_QUEUE", "queue": "wa-poc-inbound" }],
+    "consumers": [
+      {
+        "queue": "wa-poc-inbound",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_concurrency": 1,
+        "max_retries": 1
+      }
+    ]
+  }
+}

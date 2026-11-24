@@ -1,0 +1,27 @@
+{
+  "name": "wa-poc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WhatsApp <-> Claude assistant that runs KB-defined transactions (prototype)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "types": "wrangler types",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:migrate:local": "wrangler d1 migrations apply wa-poc-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply wa-poc-db --remote"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.13.0",
+    "@cfworker/json-schema": "^4.1.6"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261124.1",
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1",
+    "wrangler": "^4.167.0"
+  }
+}
