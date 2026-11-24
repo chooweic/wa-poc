@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Chat simulator</title>
+<title>Mock WhatsApp</title>
 <style>
   :root {
     --page: #e9edf2; --panel: #ffffff; --chat: #f3efe8; --ink: #17202b; --muted: #68737f;
@@ -84,19 +84,19 @@
     <input id="custom" type="text" inputmode="numeric" placeholder="Any number, e.g. 6591234567" hidden aria-label="Custom phone number">
     <button id="reset" type="button" title="Send /reset">/reset</button>
     <button id="cancel" type="button" title="Send /cancel">/cancel</button>
-    <a href="/mock-app" target="mockapp">Open mock HR app ↗</a>
+    <a href="/mock-app" target="mockapp">Open mock target app ↗</a>
   </div>
 
   <div class="phone">
     <div class="head">
-      <div class="avatar" aria-hidden="true">HR</div>
+      <div class="avatar" aria-hidden="true">AB</div>
       <div>
-        <div class="name">HR Assistant</div>
+        <div class="name">Attendance Business Agent</div>
         <div class="status" id="status">online</div>
       </div>
     </div>
     <div class="msgs" id="msgs" aria-live="polite">
-      <div class="empty" id="empty">Simulated chat. Say hello, or try “I was sick yesterday”.</div>
+      <div class="empty" id="empty">Mock WhatsApp chat with the Attendance Business Agent. Say hello, or try “I was sick yesterday”.</div>
       <div class="dots" id="dots" aria-hidden="true"><i></i><i></i><i></i></div>
     </div>
     <div class="attach" id="attach"><span id="attachName"></span><button id="attachClear" type="button">Remove</button></div>

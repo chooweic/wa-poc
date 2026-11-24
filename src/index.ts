@@ -1,9 +1,9 @@
 // Worker entry point: HTTP routes and the queue consumer.
 //
 //   /webhook                 Meta WhatsApp webhook (public; verified by signature)
-//   /mock-wa                 chat simulator                       (admin login)
-//   /mock-app                mock HR system dashboard             (admin login)
-//   /mock-api/transactions   the mock HR system's one API endpoint (admin login)
+//   /mock-wa                 Mock WhatsApp (chat simulator)       (admin login)
+//   /mock-app                mock target app dashboard           (admin login)
+//   /mock-api/transactions   the mock target app's one API endpoint (admin login)
 //   /evidence/:id            uploaded evidence files              (admin login)
 //   /admin                   KB, technical settings, drafts...    (admin login)
 

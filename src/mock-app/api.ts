@@ -1,4 +1,4 @@
-// The mock target application: a mini HR system with ONE endpoint,
+// The mock target application: a small stand-in system with ONE endpoint,
 // `POST /mock-api/transactions`, used for every transaction type and reason.
 // It stands in for the real system, which is out of scope for the prototype.
 // Every call (accepted or rejected) is written to `mock_api_log`.
@@ -9,7 +9,7 @@ export interface MockApiResult {
 }
 
 /**
- * What the mock HR system does for each reason code it knows about.
+ * What the mock target app does for each reason code it knows about.
  * A reason code that is NOT in this map (for example one a business user
  * just added in the KB) is still accepted and recorded as `pending_review`,
  * so new reasons work end to end without touching this code.
@@ -62,7 +62,7 @@ async function process(db: D1Database, payload: any): Promise<MockApiResult> {
     .bind(payload.phone_number)
     .first<MockUser>();
   if (!user) {
-    return reject(404, 'user_not_found', `No staff record matches the phone number ${payload.phone_number}.`);
+    return reject(404, 'user_not_found', `No user matches the phone number ${payload.phone_number}.`);
   }
 
   // 3. A reference may only be used once.
@@ -123,9 +123,9 @@ async function process(db: D1Database, payload: any): Promise<MockApiResult> {
         behaviour.status,
         details,
       ),
-    // The mock app's own reference number, e.g. HR-000042.
+    // The mock app's own reference number, e.g. TX-000042.
     db
-      .prepare(`UPDATE mock_leave_records SET reference_no = 'HR-' || printf('%06d', id) WHERE client_reference = ?`)
+      .prepare(`UPDATE mock_leave_records SET reference_no = 'TX-' || printf('%06d', id) WHERE client_reference = ?`)
       .bind(payload.reference),
   ];
   if (behaviour.deductFrom) {
@@ -177,7 +177,7 @@ export async function handleMockTransaction(
     result = await process(db, payload);
   } catch (e) {
     console.error('mock api error:', (e as Error).message);
-    result = reject(500, 'internal_error', 'The HR system had an internal error.');
+    result = reject(500, 'internal_error', 'The system had an internal error.');
   }
   await db
     .prepare(

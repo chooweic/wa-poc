@@ -1,4 +1,4 @@
-// Target client used in the prototype. It calls the mock HR system's API
+// Target client used in the prototype. It calls the mock target app's API
 // handler directly (same code as `POST /mock-api/transactions`), so every
 // submission is validated, recorded and logged exactly like an HTTP call.
 

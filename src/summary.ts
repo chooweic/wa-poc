@@ -62,7 +62,7 @@ export function buildSubmissionMessage(result: SubmitResult): string {
   if (result.ok) {
     const status =
       result.recordStatus === 'pending_review'
-        ? 'It is now *pending review* by HR, who will check it before it is approved.'
+        ? 'It is now *pending review* and will be checked by a person before it is approved.'
         : result.recordStatus
           ? `Status: *${result.recordStatus.replace(/_/g, ' ')}*.`
           : '';
@@ -72,16 +72,16 @@ export function buildSubmissionMessage(result: SubmitResult): string {
     case 'duplicate_reference':
       return `This request was already submitted${result.reference ? `. Your reference number is *${result.reference}*` : ''}.`;
     case 'user_not_found':
-      return "I couldn't submit this: your phone number isn't registered in the HR system. Please contact HR to get it added, then start a new request.";
+      return "I couldn't submit this: your phone number isn't registered in the system. Please ask your administrator to add it, then start a new request.";
     case 'insufficient_balance':
-      return `I couldn't submit this. ${result.errorMessage} Tell me if you'd like to change the request, or speak to HR.`;
+      return `I couldn't submit this. ${result.errorMessage} Tell me if you'd like to change the request, or speak to your supervisor.`;
     case 'invalid_dates':
     case 'invalid_days':
-      return `I couldn't submit this because the HR system didn't accept the dates or number of days (${result.errorMessage}). Let's correct them and try again.`;
+      return `I couldn't submit this because the system didn't accept the dates or number of days (${result.errorMessage}). Let's correct them and try again.`;
     default:
       if (result.retryable) {
-        return "I couldn't reach the HR system just now, so nothing was submitted. Reply *YES* to try again.";
+        return "I couldn't reach the system just now, so nothing was submitted. Reply *YES* to try again.";
       }
-      return `I couldn't submit this. The HR system said: ${result.errorMessage ?? 'the request was not accepted'}. Please check with HR, then start a new request.`;
+      return `I couldn't submit this. The system said: ${result.errorMessage ?? 'the request was not accepted'}. Please check with your supervisor, then start a new request.`;
   }
 }

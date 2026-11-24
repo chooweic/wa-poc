@@ -1,5 +1,5 @@
 // Chooses the target-app client from configuration.
-//   TARGET_APP_MODE=mock (default)  -> the built-in mock HR system
+//   TARGET_APP_MODE=mock (default)  -> the built-in mock target app
 //   TARGET_APP_MODE=http            -> a real API at TARGET_APP_URL
 
 import type { Env } from '../env';

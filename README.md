@@ -1,6 +1,6 @@
-# wa-poc: a WhatsApp assistant that runs KB-defined transactions
+# wa-poc: Attendance Business Agent
 
-A prototype where staff chat with Claude over WhatsApp to carry out simple
+A prototype of the **Attendance Business Agent**: staff chat with Claude over WhatsApp to carry out simple
 transactions on another application, for example applying for leave.
 
 - Business users describe each transaction, its allowed reasons and the
@@ -11,11 +11,11 @@ transactions on another application, for example applying for leave.
 - Nothing is submitted until the backend shows a summary and the user
   replies **YES**. That check is in code, not left to the model.
 - Every request is sent to the target application through **one fixed API
-  call**. A mock HR system is built in so you can watch records and balances
+  call**. A mock target app is built in so you can watch records and balances
   change live.
 
-Everything runs on Cloudflare's free tier, and there is a browser chat
-simulator, so you can try the whole thing without a phone or a Meta account.
+Everything runs on Cloudflare's free tier, and there is a browser chat page,
+**Mock WhatsApp**, so you can try the whole thing without a phone or a Meta account.
 
 ## Contents
 
@@ -25,13 +25,14 @@ simulator, so you can try the whole thing without a phone or a Meta account.
 4. [Deploy to Cloudflare](#deploy-to-cloudflare)
 5. [Secrets and settings](#secrets-and-settings)
 6. [Connect a real WhatsApp number](#connect-a-real-whatsapp-number)
-7. [Demo script](#demo-script)
-8. [Synthetic test images](#synthetic-test-images)
-9. [Choosing the Claude model](#choosing-the-claude-model)
-10. [Logs and tests](#logs-and-tests)
-11. [Privacy and retention](#privacy-and-retention)
-12. [Limits to know about](#limits-to-know-about)
-13. [Next steps and backlog](#next-steps-and-backlog)
+7. [Test users](#test-users)
+8. [Demo script](#demo-script)
+9. [Synthetic test images](#synthetic-test-images)
+10. [Choosing the Claude model](#choosing-the-claude-model)
+11. [Logs and tests](#logs-and-tests)
+12. [Privacy and retention](#privacy-and-retention)
+13. [Limits to know about](#limits-to-know-about)
+14. [Next steps and backlog](#next-steps-and-backlog)
 
 ## The four pages
 
@@ -39,9 +40,9 @@ All of them ask for a login: any username, and the `ADMIN_PASSWORD` you set.
 
 | Page | What it is |
 |---|---|
-| `/mock-wa` | A phone-style chat screen. Pick who you are, send text, photos and PDFs. |
-| `/mock-app` | The mock HR system: staff balances, leave records and the API call log, refreshing every 3 seconds. |
-| `/admin` | Knowledge base (for business users), Technical settings, Drafts, Conversations and Demo reset buttons. |
+| `/mock-wa` | **Mock WhatsApp**: a phone-style chat with the Attendance Business Agent. Pick who you are, send text, photos and PDFs. |
+| `/mock-app` | **Mock target app**: user balances, leave records and the API call log, refreshing every 3 seconds. |
+| `/admin` | Knowledge base (for business users), Technical settings, Drafts, Conversations, Test users and Demo reset buttons. |
 | `/evidence/<id>` | An uploaded file. Only reachable with the admin login. |
 
 `/webhook` is the only public address. It is for Meta, and every request to it
@@ -56,10 +57,10 @@ stand-in used to check the wiring, not from the real Claude model.
 |---|---|
 | Confirmation summary sent by the backend | [1-chat-confirmation-summary.png](docs/screenshots/1-chat-confirmation-summary.png) |
 | After replying YES | [2-chat-submitted.png](docs/screenshots/2-chat-submitted.png) |
-| Mock HR dashboard: balances, record, API log | [3-mock-hr-dashboard.png](docs/screenshots/3-mock-hr-dashboard.png) |
+| Mock target app: balances, record, API log | [3-mock-target-app.png](docs/screenshots/3-mock-target-app.png) |
 | Admin: knowledge base | [4-admin-knowledge-base.png](docs/screenshots/4-admin-knowledge-base.png) |
 | Admin: a draft with fields, checklist and evidence | [5-admin-draft.png](docs/screenshots/5-admin-draft.png) |
-| Admin: adding a reason, on a phone | [6-admin-reason-form-phone.png](docs/screenshots/6-admin-reason-form-phone.png) |
+| Admin: test users, on a phone | [6-admin-test-users-phone.png](docs/screenshots/6-admin-test-users-phone.png) |
 
 ## Run it on your computer
 
@@ -92,7 +93,7 @@ npm run dev
 
 Starts the app at <http://localhost:8787>. Open <http://localhost:8787/mock-wa>,
 log in, and say hello. Open <http://localhost:8787/mock-app> in a second window
-to watch the HR data.
+to watch the mock target app.
 
 The local version includes the queue, the database and file storage, all
 simulated on your machine by Wrangler.
@@ -109,7 +110,7 @@ simulated on your machine by Wrangler.
                                                                                  │
                                        TargetAppClient.submit(payload) ◄─────────┘ (never called by Claude)
                                                 │
-                                   mock HR system (D1 tables, API log)
+                                   mock target app (D1 tables, API log)
 ```
 
 ### One pipeline, two channels
@@ -204,7 +205,7 @@ src/
   index.ts             routes and the queue consumer
   webhook.ts           Meta webhook: handshake, signature, parsing
   whatsapp-client.ts   Graph API: send, typing indicator, media download
-  channels/            MessagingChannel + the Meta and simulator implementations
+  channels/            MessagingChannel + the Meta and Mock WhatsApp implementations
   pipeline.ts          store → queue → process, shared by both channels
   sender.ts            the one place that decides who the sender is
   orchestrator.ts      commands, the YES gate, the Claude tool loop, submission
@@ -214,8 +215,8 @@ src/
   media.ts             evidence checks and R2 storage
   summary.ts           the backend's confirmation and result messages
   target/              TargetAppClient, the generic payload, mock and HTTP clients
-  mock-app/            the mock HR system's API and demo data
-  ui/                  admin pages, simulator, dashboard
+  mock-app/            the mock target app's API, demo data and test users
+  ui/                  admin pages, Mock WhatsApp, mock target app dashboard
 test/                  Vitest tests
 ```
 
@@ -356,14 +357,42 @@ names may differ slightly.
    `https://<your-worker-address>/webhook` and the **Verify token** to the text
    you chose, then click **Verify and save**.
 7. Under **Webhook fields**, subscribe to **messages**.
-8. Open `/admin` → **Demo** → **Reset demo data**. This adds the numbers in
-   `ALLOWED_WHATSAPP_NUMBERS` to the mock HR system as "My test phone", so
-   your requests are accepted.
+8. Add your phone number as a test user (see [Test users](#test-users)), so
+   your requests are accepted. Alternatively, **Admin → Demo → Reset demo
+   data** adds every number in `ALLOWED_WHATSAPP_NUMBERS` as "My test phone".
 9. Send a WhatsApp message to the test number from your phone.
 
 If nothing comes back, see [Logs and tests](#logs-and-tests). The usual causes
 are an expired access token, a phone not added as a test recipient, or a number
 missing from `ALLOWED_WHATSAPP_NUMBERS` (such messages are ignored silently).
+
+## Test users
+
+The mock target app only accepts requests from phone numbers it knows. In this
+prototype a user *is* their WhatsApp number; there is no employee ID.
+
+To add one, open **`/admin` → Test users** (it works on a phone too):
+
+1. Enter the **WhatsApp number** in international format, digits only, for
+   example `6591234567` (spaces and a leading `+` are removed for you).
+2. Enter a **name** and the starting balances: medical leave left, off days
+   left and unpaid days taken. Half days are allowed.
+3. Click **Add user**.
+
+In the list below the form you can change a user's name or balances and click
+**Save**, or **Remove** them. Saving a number that already exists updates it.
+
+- **On Mock WhatsApp** the new user appears in the "You are" list once you
+  reload the page. You can also pick "Other number…" to chat as any number,
+  but its requests are rejected at submission unless it is a test user.
+- **On a real phone** the number must also be in `ALLOWED_WHATSAPP_NUMBERS`
+  and added as a test recipient in Meta (see
+  [Connect a real WhatsApp number](#connect-a-real-whatsapp-number)).
+
+Three demo users are built in: Aisha Rahman (`6590000001`), Tan Wei Ming
+(`6590000002`) and Priya Nair (`6590000003`). **Admin → Demo → Reset demo
+data** deletes the mock target app's records and API log and puts these three
+back to their starting balances. Users you added are kept.
 
 ## Demo script
 
@@ -406,7 +435,7 @@ Try `samples/sample-mc-unsigned.png` to see Claude point out the missing signatu
    None. Maximum days: 2. Save.
 2. Back in the chat, say: `My son is ill, I need to stay home with him tomorrow`.
 3. Claude accepts the new reason straight away. After `YES`, the record appears
-   as `pending_review`, because the mock HR system has no special handling for
+   as `pending_review`, because the mock target app has no special handling for
    a reason it has never seen. No redeploy at any point.
 
 **5. No supervisor approval yet**
@@ -428,7 +457,7 @@ Try `samples/sample-mc-unsigned.png` to see Claude point out the missing signatu
 3. Ask again. The answer changes on the very next message.
 
 Other things worth showing: `/cancel` and `/reset` buttons; an unknown number
-(choose "Other number…" on `/mock-wa`), which the HR system rejects at
+(choose "Other number…" on `/mock-wa`), which the mock target app rejects at
 submission with a plain-language message; **Priya Nair** (`6590000003`), who
 has 1 day of medical leave left, asking for 2.
 

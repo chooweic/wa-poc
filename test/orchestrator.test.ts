@@ -97,13 +97,13 @@ describe('confirmation gating: no submission without the user saying YES', () =>
     const replies = await sendViaSimulator(env, createDeps(env, claude), PHONE, text);
     expect(claude.requests).toHaveLength(0);
     expect(replies).toHaveLength(1);
-    expect(replies[0]).toMatch(/Submitted\. Your reference number is \*HR-000001\*/);
+    expect(replies[0]).toMatch(/Submitted\. Your reference number is \*TX-000001\*/);
 
     const [record] = await records();
     expect(record).toMatchObject({ phone_number: PHONE, reason_code: 'medical', status: 'approved', days: 1, start_date: '2026-11-23' });
     const user = await env.DB.prepare('SELECT sick_leave_balance FROM mock_users WHERE phone_number = ?').bind(PHONE).first<any>();
     expect(user.sick_leave_balance).toBe(13);
-    expect(await lastDraft()).toMatchObject({ status: 'submitted', target_reference: 'HR-000001' });
+    expect(await lastDraft()).toMatchObject({ status: 'submitted', target_reference: 'TX-000001' });
     expect(await openDraft()).toBeNull();
   });
 
@@ -165,7 +165,7 @@ describe('submission results', () => {
     const stranger = '6591112222';
     await reachConfirmation(stranger);
     const replies = await sendViaSimulator(env, createDeps(env, new ScriptedClaude([])), stranger, 'yes');
-    expect(replies[0]).toMatch(/your phone number isn't registered in the HR system/);
+    expect(replies[0]).toMatch(/your phone number isn't registered in the system/);
     expect(await records()).toHaveLength(0);
     expect((await lastDraft()).status).toBe('failed');
   });

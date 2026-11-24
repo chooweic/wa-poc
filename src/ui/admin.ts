@@ -26,6 +26,7 @@ import {
   type KbTable,
 } from '../kb-repo';
 import { clearConversations, seedMockData } from '../mock-app/seed';
+import { deleteMockUser, listMockUsers, parseUserInput, saveMockUser, type UserInput } from '../mock-app/users';
 import { html, htmlResponse, raw, redirect, type Raw } from '../util';
 import { checkSchemaText } from '../validation';
 
@@ -84,7 +85,7 @@ code{font:12.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background
 .bubble small{display:block;color:var(--muted);font-size:11px;margin-top:2px}
 `;
 
-type Tab = 'kb' | 'technical' | 'drafts' | 'conversations' | 'demo';
+type Tab = 'kb' | 'technical' | 'drafts' | 'conversations' | 'users' | 'demo';
 
 function layout(tab: Tab, title: string, body: Raw, flash?: { text: string; error?: boolean }): Response {
   const tabs: [Tab, string, string][] = [
@@ -92,15 +93,16 @@ function layout(tab: Tab, title: string, body: Raw, flash?: { text: string; erro
     ['technical', 'Technical', '/admin/technical'],
     ['drafts', 'Drafts', '/admin/drafts'],
     ['conversations', 'Conversations', '/admin/conversations'],
+    ['users', 'Test users', '/admin/users'],
     ['demo', 'Demo', '/admin/demo'],
   ];
   const page = html`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${title} · Admin</title><style>${raw(CSS)}</style></head>
+<title>${title} · Attendance Business Agent</title><style>${raw(CSS)}</style></head>
 <body>
 <header>
-  <div class="top"><h1>Admin</h1>
-    <div class="links"><a href="/mock-wa" target="mockwa">Chat simulator ↗</a><a href="/mock-app" target="mockapp">Mock HR app ↗</a></div>
+  <div class="top"><h1>Attendance Business Agent <span class="sub">Admin</span></h1>
+    <div class="links"><a href="/mock-wa" target="mockwa">Mock WhatsApp ↗</a><a href="/mock-app" target="mockapp">Mock target app ↗</a></div>
   </div>
   <nav>${tabs.map(([key, label, href]) => html`<a href="${href}" class="${key === tab ? 'on' : ''}">${label}</a>`)}</nav>
 </header>
@@ -171,7 +173,7 @@ Write it the way you would explain it to a new colleague. The assistant follows 
   <li><strong>Deadlines and limits.</strong> “Within 2 working days of returning to work.” “Not more than 5 days in a row.”</li>
   <li><strong>The steps in order</strong>, numbered if that helps, and any exceptions.</li>
 </ul>
-If a situation is not covered, the assistant tells the user it is not sure and suggests they ask their supervisor or HR. It never makes up a rule.</div>`;
+If a situation is not covered, the assistant tells the user it is not sure and suggests they ask their supervisor or whoever the guides say to contact. It never makes up a rule.</div>`;
 
 const checkbox = (name: string, checked: boolean, label: string): Raw =>
   html`<label class="check"><input type="checkbox" name="${name}" value="1" ${checked ? raw('checked') : ''}> ${label}</label>`;
@@ -536,7 +538,7 @@ async function demoRoutes(request: Request, env: Env, url: URL, parts: string[])
   if (request.method === 'POST') {
     if (parts[0] === 'reset-demo') {
       await seedMockData(env);
-      return redirect('/admin/demo?msg=Mock+HR+data+was+reset');
+      return redirect('/admin/demo?msg=Mock+target+app+data+was+reset');
     }
     if (parts[0] === 'clear-conversations') {
       await clearConversations(env);
@@ -546,8 +548,9 @@ async function demoRoutes(request: Request, env: Env, url: URL, parts: string[])
   }
   const body = html`<h2>Demo data</h2>
 <div class="card"><h3>Reset demo data</h3>
-  <p class="sub">Re-creates the mock HR system’s staff and balances, and deletes its records and API log. The knowledge base and chats are not touched.</p>
-  <form method="post" action="/admin/demo/reset-demo" onsubmit="return confirm('Reset the mock HR data?')"><button class="primary">Reset demo data</button></form>
+  <p class="sub">Deletes the mock target app’s records and API log, and puts the built-in demo users back to their starting balances.
+  Test users you added on the <a href="/admin/users">Test users</a> tab are kept. The knowledge base and chats are not touched.</p>
+  <form method="post" action="/admin/demo/reset-demo" onsubmit="return confirm('Reset the mock target app data?')"><button class="primary">Reset demo data</button></form>
 </div>
 <div class="card"><h3>Clear conversations</h3>
   <p class="sub">Deletes every conversation, draft and uploaded evidence file. Use it to start a demo from a clean slate.</p>
@@ -555,6 +558,73 @@ async function demoRoutes(request: Request, env: Env, url: URL, parts: string[])
     <button class="danger">Clear conversations, drafts and files</button></form>
 </div>`;
   return layout('demo', 'Demo', body, flashFrom(url));
+}
+
+// ------------------------------------------------------------ test users
+
+function userInputFrom(form: FormData): UserInput {
+  return { phone: field(form, 'phone'), name: field(form, 'name'), sick: field(form, 'sick'), off: field(form, 'off'), unpaid: field(form, 'unpaid') };
+}
+
+async function usersPage(env: Env, flash?: { text: string; error?: boolean }, typed?: UserInput): Promise<Response> {
+  const users = await listMockUsers(env.DB);
+  const v = typed ?? { phone: '', name: '', sick: '14', off: '6', unpaid: '0' };
+  // Inputs in a table row sit outside that row's <form>; the form="..." attribute still posts them with it.
+  const num = (name: string, value: unknown, label: string, formId?: string) =>
+    html`<input name="${name}" type="number" min="0" max="999" step="0.5" value="${value}" aria-label="${label}" style="width:6.5em"${
+      formId ? html` form="${formId}"` : html` id="${name}"`
+    }>`;
+  const body = html`<h2>Test users</h2>
+<p class="sub">People the mock target app knows, identified by their WhatsApp number. A request from a number that is not listed here is
+rejected when it is submitted. New users appear in the Mock WhatsApp “You are” list after the page is reloaded.</p>
+<div class="help">To use a test user on a <strong>real phone</strong>, the number must also be in the <code>ALLOWED_WHATSAPP_NUMBERS</code> setting
+and added as a test recipient in Meta. On Mock WhatsApp any number listed here works straight away.</div>
+<form method="post" action="/admin/users/save" class="card">
+  <h3>Add a test user</h3>
+  <div class="row" style="align-items:flex-end">
+    <div class="grow"><label for="phone">WhatsApp number</label>
+      <input id="phone" name="phone" type="text" inputmode="numeric" value="${v.phone}" placeholder="6591234567" required></div>
+    <div class="grow"><label for="name">Name</label><input id="name" name="name" type="text" value="${v.name}" required maxlength="80"></div>
+  </div>
+  <div class="row" style="align-items:flex-end">
+    <div><label for="sick">Medical leave left</label>${num('sick', v.sick, 'Medical leave left')}</div>
+    <div><label for="off">Off days left</label>${num('off', v.off, 'Off days left')}</div>
+    <div><label for="unpaid">Unpaid days taken</label>${num('unpaid', v.unpaid, 'Unpaid days taken')}</div>
+  </div>
+  <p class="hint">International format, digits only, no “+”. Saving a number that already exists updates that user.</p>
+  <p><button class="primary">Add user</button></p>
+</form>
+<div class="card scroll">${
+    users.length
+      ? html`<table><thead><tr><th>WhatsApp number</th><th>Name</th><th>Medical leave left</th><th>Off days left</th><th>Unpaid days taken</th><th></th></tr></thead><tbody>
+${users.map(
+  (u) => html`<tr><td><code>${u.phone_number}</code></td>
+<td><form id="u${u.phone_number}" method="post" action="/admin/users/save"><input type="hidden" name="phone" value="${u.phone_number}">
+<input name="name" type="text" value="${u.name}" required maxlength="80" aria-label="Name" style="min-width:10em"></form></td>
+<td>${num('sick', u.sick_leave_balance, 'Medical leave left', `u${u.phone_number}`)}</td><td>${num('off', u.off_day_balance, 'Off days left', `u${u.phone_number}`)}</td>
+<td>${num('unpaid', u.unpaid_days_taken, 'Unpaid days taken', `u${u.phone_number}`)}</td>
+<td><div class="actions"><button form="u${u.phone_number}">Save</button>
+<form method="post" action="/admin/users/delete" onsubmit="return confirm('Remove ${u.name}? Their past records are kept.')">
+<input type="hidden" name="phone" value="${u.phone_number}"><button class="danger">Remove</button></form></div></td></tr>`,
+)}</tbody></table>`
+      : html`<p class="sub">No users yet.</p>`
+  }</div>`;
+  return layout('users', 'Test users', body, flash);
+}
+
+async function usersRoutes(request: Request, env: Env, url: URL, parts: string[]): Promise<Response> {
+  if (request.method !== 'POST') return usersPage(env, flashFrom(url));
+  const form = await request.formData();
+  if (parts[0] === 'delete') {
+    await deleteMockUser(env.DB, field(form, 'phone'));
+    return redirect('/admin/users?msg=User+removed');
+  }
+  if (parts[0] !== 'save') return notFound();
+  const input = userInputFrom(form);
+  const parsed = parseUserInput(input);
+  if ('error' in parsed) return usersPage(env, { text: `Not saved. ${parsed.error}`, error: true }, input);
+  await saveMockUser(env.DB, parsed.user);
+  return redirect('/admin/users?msg=Saved');
 }
 
 // ---------------------------------------------------------------- router
@@ -582,6 +652,8 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
       return draftsRoutes(env, parts);
     case 'conversations':
       return conversationsRoutes(env, parts);
+    case 'users':
+      return usersRoutes(request, env, url, parts);
     case 'demo':
       return demoRoutes(request, env, url, parts);
     default:

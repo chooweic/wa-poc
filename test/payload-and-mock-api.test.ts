@@ -66,7 +66,7 @@ describe('mock target application: POST /mock-api/transactions', () => {
   test('medical leave is approved and deducts the sick-leave balance', async () => {
     const result = await submit(payload());
     expect(result.status).toBe(201);
-    expect(result.body).toMatchObject({ reference_no: 'HR-000001', status: 'approved', days: 2 });
+    expect(result.body).toMatchObject({ reference_no: 'TX-000001', status: 'approved', days: 2 });
     expect((await user('6590000001')).sick_leave_balance).toBe(12);
   });
 
@@ -106,7 +106,7 @@ describe('mock target application: POST /mock-api/transactions', () => {
     await submit(p);
     const again = await submit(p);
     expect(again.status).toBe(409);
-    expect(again.body).toMatchObject({ error: { code: 'duplicate_reference' }, reference_no: 'HR-000001' });
+    expect(again.body).toMatchObject({ error: { code: 'duplicate_reference' }, reference_no: 'TX-000001' });
     expect((await user('6590000001')).sick_leave_balance).toBe(12);
   });
 
@@ -134,7 +134,7 @@ describe('mock target application: POST /mock-api/transactions', () => {
     const [rejected, accepted] = state.log; // newest first
     expect(accepted).toMatchObject({ method: 'POST', path: '/mock-api/transactions', status: 201, idempotency_key: good.reference });
     expect(JSON.parse(accepted.request_json)).toEqual(good);
-    expect(JSON.parse(accepted.response_json).reference_no).toBe('HR-000001');
+    expect(JSON.parse(accepted.response_json).reference_no).toBe('TX-000001');
     expect(rejected.status).toBe(404);
     expect(state.records).toHaveLength(1);
     expect(state.users).toHaveLength(3);
