@@ -47,6 +47,20 @@ All of them ask for a login: any username, and the `ADMIN_PASSWORD` you set.
 `/webhook` is the only public address. It is for Meta, and every request to it
 must carry Meta's signature.
 
+### Screenshots
+
+From a local run. The assistant's replies in these came from a scripted
+stand-in used to check the wiring, not from the real Claude model.
+
+| | |
+|---|---|
+| Confirmation summary sent by the backend | [1-chat-confirmation-summary.png](docs/screenshots/1-chat-confirmation-summary.png) |
+| After replying YES | [2-chat-submitted.png](docs/screenshots/2-chat-submitted.png) |
+| Mock HR dashboard: balances, record, API log | [3-mock-hr-dashboard.png](docs/screenshots/3-mock-hr-dashboard.png) |
+| Admin: knowledge base | [4-admin-knowledge-base.png](docs/screenshots/4-admin-knowledge-base.png) |
+| Admin: a draft with fields, checklist and evidence | [5-admin-draft.png](docs/screenshots/5-admin-draft.png) |
+| Admin: adding a reason, on a phone | [6-admin-reason-form-phone.png](docs/screenshots/6-admin-reason-form-phone.png) |
+
 ## Run it on your computer
 
 You need [Node.js](https://nodejs.org) 22 or newer.
